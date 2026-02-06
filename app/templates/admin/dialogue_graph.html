@@ -1,0 +1,410 @@
+{% extends "admin/base.html" %}
+{% block title %}Граф диалога · {{ thread.title or thread.key }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/drawflow@0.0.60/dist/drawflow.min.css">
+<style>
+    .graph-editor { display: grid; grid-template-columns: 1fr 340px; gap: 0; min-height: calc(100vh - 100px); }
+    @media (max-width: 1100px) { .graph-editor { grid-template-columns: 1fr; } }
+    #drawflow { width: 100%; height: 100%; min-height: 500px; background: var(--admin-bg); }
+    .graph-toolbar { padding: 12px 16px; background: var(--admin-surface); border-bottom: 1px solid var(--admin-border); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .graph-sidebar { background: var(--admin-sidebar); border-left: 1px solid var(--admin-border); padding: 16px; overflow-y: auto; }
+    .graph-sidebar h4 { margin: 0 0 12px; font-size: 0.95rem; color: var(--admin-muted); }
+    .graph-sidebar .form-group { margin-bottom: 14px; }
+    .graph-sidebar label { display: block; font-size: 0.8rem; color: var(--admin-muted); margin-bottom: 4px; }
+    .graph-sidebar input, .graph-sidebar select, .graph-sidebar textarea { width: 100%; }
+    .graph-sidebar .cond-extra { margin-top: 8px; display: none; }
+    .graph-sidebar .cond-extra.show { display: block; }
+    .node-preview { padding: 10px 12px; background: var(--admin-bg); border-radius: 6px; font-size: 0.85rem; margin-bottom: 12px; max-height: 80px; overflow: hidden; text-overflow: ellipsis; }
+    .reply-opt { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+    .reply-opt input { flex: 1; }
+    .reply-opt select { width: 100px; }
+    .drawflow .drawflow-node { background: var(--admin-surface) !important; border: 1px solid var(--admin-border) !important; border-radius: 8px !important; min-width: 180px; }
+    .drawflow .drawflow-node.selected { border-color: var(--admin-accent) !important; box-shadow: 0 0 0 2px var(--admin-accent); }
+    .drawflow .drawflow-node .drawflow_content_node { padding: 10px 14px; }
+    .drawflow .drawflow-node .node-char { font-size: 0.75rem; color: var(--admin-accent); margin-bottom: 4px; }
+    .drawflow .drawflow-node .node-text { font-size: 0.9rem; }
+    .drawflow .drawflow-node .node-condition { font-size: 0.7rem; color: var(--admin-muted); margin-top: 4px; }
+</style>
+{% endblock %}
+{% block content %}
+<p><a href="/admin/dialogues" style="color:var(--admin-accent);">← К списку диалогов</a> · <a href="/admin/dialogues/{{ thread.id }}" style="color:var(--admin-muted);">Редактор списка</a></p>
+<h2>Граф диалога: {{ thread.title or thread.key }}</h2>
+<p style="color:var(--admin-muted);font-size:0.9rem;">Перетаскивайте узлы, соединяйте выход с входом. Двойной клик — редактирование. Удаление: Del или правый клик.</p>
+
+<div class="graph-editor">
+    <div>
+        <div class="graph-toolbar">
+            <button type="button" id="btn-add-node" class="btn">+ Добавить сообщение</button>
+            <button type="button" id="btn-save" class="btn">💾 Сохранить граф</button>
+            <button type="button" id="btn-zoom-in">+</button>
+            <button type="button" id="btn-zoom-out">−</button>
+            <span id="save-status" style="margin-left:auto;font-size:0.85rem;color:var(--admin-muted);"></span>
+        </div>
+        <div id="drawflow"></div>
+    </div>
+    <div class="graph-sidebar">
+        <div id="sidebar-empty">
+            <p style="color:var(--admin-muted);">Выберите узел для редактирования</p>
+        </div>
+        <div id="sidebar-edit" style="display:none;">
+            <h4>Редактирование сообщения</h4>
+            <div class="node-preview" id="node-preview"></div>
+            <div class="form-group">
+                <label>От чьего имени</label>
+                <input type="text" id="edit-character" placeholder="Персонаж">
+            </div>
+            <div class="form-group">
+                <label>Кому показывать</label>
+                <select id="edit-audience"><option value="TEAM">Вся команда</option><option value="ROLE_A">Роль A</option><option value="ROLE_B">Роль B</option></select>
+            </div>
+            <div class="form-group">
+                <label>Текст сообщения</label>
+                <textarea id="edit-text" rows="4" placeholder="Текст"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Условие показа</label>
+                <select id="edit-condition">
+                    <option value="immediate">Сразу</option>
+                    <option value="scheduled">По расписанию</option>
+                    <option value="after_station">После станции</option>
+                    <option value="after_message">После сообщения</option>
+                </select>
+            </div>
+            <div id="cond-scheduled" class="form-group cond-extra">
+                <label>Дата и время</label>
+                <input type="datetime-local" id="edit-scheduled">
+            </div>
+            <div id="cond-station" class="form-group cond-extra">
+                <label>Станция</label>
+                <select id="edit-station"><option value="">—</option>{% for s in stations %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
+            </div>
+            <div id="cond-message" class="form-group cond-extra">
+                <label>После сообщения ID</label>
+                <input type="number" id="edit-after-msg" placeholder="ID узла">
+            </div>
+            <div class="form-group">
+                <label>Варианты ответа (переходы)</label>
+                <p style="font-size:0.8rem;color:var(--admin-muted);margin-bottom:8px;">Соедините выход этого узла с нужным узлом. Текст кнопки:</p>
+                <div id="reply-options-list"></div>
+                <button type="button" id="btn-add-reply" style="margin-top:8px;font-size:0.85rem;">+ Вариант ответа</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/drawflow@0.0.60/dist/drawflow.min.js"></script>
+<script>
+(function() {
+    const threadId = {{ thread.id }};
+    const stations = {{ stations_json | safe }};
+
+    const container = document.getElementById('drawflow');
+    const editor = new Drawflow(container);
+    editor.reroute = true;
+    editor.start();
+
+    const nodeHtml = (data) => `
+        <div class="node-char">${(data.character || '—')} → ${data.audience || 'TEAM'}</div>
+        <div class="node-text">${(data.text || '').substring(0, 80)}${(data.text||'').length > 80 ? '…' : ''}</div>
+        <div class="node-condition">${(data.gate_rules && data.gate_rules.condition_type !== 'immediate') ? data.gate_rules.condition_type : 'сразу'}</div>
+    `;
+
+    const messageNodeEl = document.createElement('div');
+    messageNodeEl.className = 'drawflow_content_node';
+    messageNodeEl.innerHTML = '<div class="node-char"></div><div class="node-text">Новое сообщение</div><div class="node-condition">сразу</div>';
+    editor.registerNode('message', messageNodeEl, {}, {});
+
+    function addNode(data, posX, posY, id) {
+        const opts = data.reply_options || [];
+        const outputs = Math.max(1, opts.length);
+        const d = { ...data };
+        const nid = editor.addNode('message', 1, outputs, posX, posY, 'message', d, 'message', true);
+        const realId = id !== undefined ? id : nid;
+        editor.updateNodeDataFromId(nid, { ...d, _dbId: realId });
+        updateNodeView(nid);
+        return nid;
+    }
+
+    function updateNodeView(nodeId) {
+        const node = editor.getNodeFromId(nodeId);
+        if (!node) return;
+        const d = node.data;
+        const outputs = (d.reply_options || []).length || 1;
+        const currentOuts = Object.keys(node.outputs || {}).length;
+        while (currentOuts < outputs) {
+            editor.addNodeOutput(nodeId);
+            currentOuts++;
+        }
+        while (currentOuts > outputs && currentOuts > 1) {
+            editor.removeNodeOutput(nodeId, 'output_' + currentOuts);
+            currentOuts--;
+        }
+        const content = container.querySelector('#node-' + nodeId + ' .drawflow_content_node');
+        if (content) content.innerHTML = nodeHtml(d);
+    }
+
+    const idToNode = {};
+    const nodeToId = {};
+    let nextTempId = -1;
+
+    async function loadGraph() {
+        const r = await fetch('/admin/dialogues/' + threadId + '/graph/data');
+        const g = await r.json();
+        editor.clear();
+        idToNode.length = 0;
+        Object.keys(idToNode).forEach(k => delete idToNode[k]);
+        Object.keys(nodeToId).forEach(k => delete nodeToId[k]);
+
+        const nodes = g.nodes || [];
+        for (const n of nodes) {
+            const dfId = addNode(n, n.x, n.y, n.id);
+            idToNode[n.id] = dfId;
+            nodeToId[dfId] = n.id;
+        }
+        for (const n of nodes) {
+            const srcDf = idToNode[n.id];
+            if (srcDf == null) continue;
+            const opts = n.reply_options || [];
+            for (let i = 0; i < opts.length; i++) {
+                const tgt = opts[i].next_id;
+                if (tgt == null || tgt === '') continue;
+                const tgtKey = typeof tgt === 'number' ? tgt : (parseInt(tgt, 10) || tgt);
+                const tgtDf = idToNode[tgtKey] ?? idToNode[tgt];
+                if (tgtDf != null) {
+                    try {
+                        editor.addConnection(srcDf, tgtDf, 'output_' + (i + 1), 'input_1');
+                    } catch (_) {}
+                }
+            }
+        }
+    }
+
+    function getDbIdFromNode(dfId) {
+        const num = parseInt(String(dfId), 10);
+        if (isNaN(num)) return null;
+        try {
+            const node = editor.getNodeFromId(num);
+            if (node && node.data && node.data._dbId !== undefined) return node.data._dbId;
+        } catch (_) {}
+        return num;
+    }
+
+    function buildPayload() {
+        const data = editor.export();
+        const module = data.drawflow.Home || data.drawflow.Default || {};
+        const nodeData = module.data || {};
+        const rawNodes = [];
+        for (const [k, v] of Object.entries(nodeData)) {
+            if (v.pos_x === undefined && v.pos_y === undefined) continue;
+            const d = v.data || {};
+            const dfId = parseInt(String(k), 10);
+            if (isNaN(dfId)) continue;
+            const dbId = d._dbId !== undefined ? d._dbId : null;
+            const outputs = v.outputs || {};
+            const existingOpts = d.reply_options || [];
+            const reply_options = [];
+            const outputKeys = Object.keys(outputs).filter(x => /^output_\d+$/.test(x)).sort(
+                (a, b) => parseInt(a.replace('output_', ''), 10) - parseInt(b.replace('output_', ''), 10)
+            );
+            for (let i = 0; i < outputKeys.length; i++) {
+                const outKey = outputKeys[i];
+                const conn = (outputs[outKey].connections || [])[0];
+                const nextId = conn ? getDbIdFromNode(conn.node) : null;
+                const text = (existingOpts[i] && existingOpts[i].text) || ('Ответ ' + (i + 1));
+                const delay = (existingOpts[i] && existingOpts[i].delay_seconds) || 0;
+                reply_options.push({ text, next_id: nextId, delay_seconds: delay });
+            }
+            if (reply_options.length === 0) reply_options.push({ text: 'Далее', next_id: null, delay_seconds: 0 });
+            const nodeId = (dbId !== null && dbId !== undefined) ? dbId : ('new_' + (nextTempId--));
+            rawNodes.push({
+                dfId, nodeId, d, v,
+                reply_options, pos_x: v.pos_x || 0, pos_y: v.pos_y || 0,
+            });
+        }
+        rawNodes.sort((a, b) => (a.pos_y - b.pos_y) || (a.pos_x - b.pos_x));
+        const nodes = rawNodes.map(({ nodeId, d, v, reply_options, pos_x, pos_y }) => ({
+            id: nodeId,
+            x: pos_x, y: pos_y,
+            text: d.text || '',
+            character: d.character || '',
+            audience: d.audience || 'TEAM',
+            gate_rules: d.gate_rules || { condition_type: 'immediate' },
+            reply_options,
+        }));
+        return { nodes };
+    }
+
+    async function saveGraph() {
+        const payload = buildPayload();
+        const status = document.getElementById('save-status');
+        status.textContent = 'Сохранение…';
+        try {
+            const r = await fetch('/admin/dialogues/' + threadId + '/graph', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const res = await r.json();
+            if (res.ok) {
+                status.textContent = 'Сохранено';
+                setTimeout(() => loadGraph(), 300);
+            } else {
+                status.textContent = 'Ошибка: ' + (res.error || r.status);
+            }
+        } catch (e) {
+            status.textContent = 'Ошибка: ' + e.message;
+        }
+    }
+
+    let selectedNodeId = null;
+    function showSidebar(nodeId) {
+        selectedNodeId = nodeId;
+        document.getElementById('sidebar-empty').style.display = 'none';
+        document.getElementById('sidebar-edit').style.display = 'block';
+        const node = editor.getNodeFromId(nodeId);
+        if (!node) return;
+        const d = node.data || {};
+        document.getElementById('edit-character').value = d.character || '';
+        document.getElementById('edit-audience').value = d.audience || 'TEAM';
+        document.getElementById('edit-text').value = d.text || '';
+        const gr = d.gate_rules || {};
+        document.getElementById('edit-condition').value = gr.condition_type || 'immediate';
+        document.getElementById('edit-scheduled').value = (gr.scheduled_at || '').toString().slice(0, 16);
+        document.getElementById('edit-station').value = gr.station_id || '';
+        document.getElementById('edit-after-msg').value = gr.after_message_id || '';
+        document.getElementById('node-preview').textContent = (d.text || '').substring(0, 100) + ((d.text||'').length > 100 ? '…' : '');
+        document.querySelectorAll('.cond-extra').forEach(el => el.classList.remove('show'));
+        const cond = document.getElementById('edit-condition').value;
+        if (cond === 'scheduled') document.getElementById('cond-scheduled').classList.add('show');
+        if (cond === 'after_station') document.getElementById('cond-station').classList.add('show');
+        if (cond === 'after_message') document.getElementById('cond-message').classList.add('show');
+        renderReplyOptions(d.reply_options || []);
+    }
+
+    function renderReplyOptions(opts) {
+        const list = document.getElementById('reply-options-list');
+        list.innerHTML = '';
+        const allNodes = [];
+        const mod = editor.export().drawflow?.Home?.data || {};
+        for (const [k, v] of Object.entries(mod)) {
+            if (v.data) allNodes.push({ dfId: parseInt(k,10), id: v.data._dbId, text: (v.data.text||'').substring(0,30) });
+        }
+        (opts.length ? opts : [{ text: '', next_id: null, delay_seconds: 0 }]).forEach((o, i) => {
+            const div = document.createElement('div');
+            div.className = 'reply-opt';
+            const optsHtml = allNodes.map(n => `<option value="${n.id}" ${o.next_id == n.id ? 'selected' : ''}>#${n.id} ${n.text}</option>`).join('');
+            const delay = o.delay_seconds ?? 0;
+            div.innerHTML = `<input type="text" placeholder="Текст кнопки" data-idx="${i}" value="${(o.text||'').replace(/"/g,'&quot;')}"><select class="reply-target" data-idx="${i}"><option value="">—</option>${optsHtml}</select><input type="number" class="reply-delay" data-idx="${i}" placeholder="0" min="0" max="3600" value="${delay}" title="Задержка перед показом (сек)" style="width:60px;"> сек<button type="button" class="btn-ghost" data-idx="${i}" title="Удалить">×</button>`;
+            list.appendChild(div);
+            div.querySelector('input[type="text"]').oninput = () => applyReplyOptFromSidebar();
+            div.querySelector('select').onchange = () => applyReplyOptFromSidebar();
+            const delayInp = div.querySelector('.reply-delay');
+            if (delayInp) delayInp.onchange = () => applyReplyOptFromSidebar();
+            if (div.querySelector('button')) div.querySelector('button').onclick = () => {
+                if (opts.length > 1 && selectedNodeId != null) {
+                    opts.splice(i, 1);
+                    const node = editor.getNodeFromId(selectedNodeId);
+                    if (node && node.data) {
+                        const newData = { ...node.data, reply_options: opts };
+                        editor.updateNodeDataFromId(selectedNodeId, newData);
+                        updateNodeView(selectedNodeId);
+                    }
+                    renderReplyOptions(opts);
+                }
+            };
+        });
+    }
+
+    function applyReplyOptFromSidebar() {
+        if (selectedNodeId == null) return;
+        const list = document.getElementById('reply-options-list');
+        const opts = [];
+        list.querySelectorAll('.reply-opt').forEach(row => {
+            const inp = row.querySelector('input[type="text"]');
+            const sel = row.querySelector('select');
+            const delayInp = row.querySelector('.reply-delay');
+            const text = inp ? inp.value.trim() : '';
+            const nextId = sel && sel.value ? (isNaN(parseInt(sel.value,10)) ? sel.value : parseInt(sel.value,10)) : null;
+            const delay = delayInp ? (parseInt(delayInp.value, 10) || 0) : 0;
+            opts.push({ text: text || 'Ответ', next_id: nextId, delay_seconds: delay });
+        });
+        const node = editor.getNodeFromId(selectedNodeId);
+        if (node && node.data) {
+            const newData = { ...node.data, reply_options: opts };
+            editor.updateNodeDataFromId(selectedNodeId, newData);
+            updateNodeView(selectedNodeId);
+        }
+    }
+
+    function hideSidebar() {
+        selectedNodeId = null;
+        document.getElementById('sidebar-empty').style.display = 'block';
+        document.getElementById('sidebar-edit').style.display = 'none';
+    }
+
+    function applySidebarToNode() {
+        if (selectedNodeId == null) return;
+        const node = editor.getNodeFromId(selectedNodeId);
+        if (!node) return;
+        const gr = { condition_type: document.getElementById('edit-condition').value };
+        if (gr.condition_type === 'scheduled') gr.scheduled_at = document.getElementById('edit-scheduled').value;
+        if (gr.condition_type === 'after_station') gr.station_id = parseInt(document.getElementById('edit-station').value, 10) || null;
+        if (gr.condition_type === 'after_message') gr.after_message_id = parseInt(document.getElementById('edit-after-msg').value, 10) || null;
+        const newData = {
+            ...node.data,
+            character: document.getElementById('edit-character').value,
+            audience: document.getElementById('edit-audience').value,
+            text: document.getElementById('edit-text').value,
+            gate_rules: gr,
+            reply_options: node.data.reply_options || [],
+        };
+        editor.updateNodeDataFromId(selectedNodeId, newData);
+        updateNodeView(selectedNodeId);
+    }
+
+    document.getElementById('edit-character').addEventListener('change', applySidebarToNode);
+    document.getElementById('edit-audience').addEventListener('change', applySidebarToNode);
+    document.getElementById('edit-text').addEventListener('input', applySidebarToNode);
+    document.getElementById('edit-condition').addEventListener('change', function() {
+        document.querySelectorAll('.cond-extra').forEach(el => el.classList.remove('show'));
+        const v = this.value;
+        if (v === 'scheduled') document.getElementById('cond-scheduled').classList.add('show');
+        if (v === 'after_station') document.getElementById('cond-station').classList.add('show');
+        if (v === 'after_message') document.getElementById('cond-message').classList.add('show');
+        applySidebarToNode();
+    });
+    document.getElementById('edit-scheduled').addEventListener('change', applySidebarToNode);
+    document.getElementById('edit-station').addEventListener('change', applySidebarToNode);
+    document.getElementById('edit-after-msg').addEventListener('change', applySidebarToNode);
+
+    document.getElementById('btn-add-reply').onclick = () => {
+        if (selectedNodeId == null) return;
+        const node = editor.getNodeFromId(selectedNodeId);
+        if (!node || !node.data) return;
+        const opts = [...(node.data.reply_options || []), { text: 'Новый ответ', next_id: null, delay_seconds: 0 }];
+        const newData = { ...node.data, reply_options: opts };
+        editor.updateNodeDataFromId(selectedNodeId, newData);
+        updateNodeView(selectedNodeId);
+        renderReplyOptions(opts);
+    };
+
+    document.getElementById('btn-add-node').onclick = () => {
+        const tempId = 'new_' + (nextTempId--);
+        const exp = editor.export().drawflow?.Home?.data || {};
+        const x = 100, y = 100 + Object.keys(exp).length * 80;
+        const nid = addNode({ text: 'Новое сообщение', character: '', audience: 'TEAM', gate_rules: { condition_type: 'immediate' }, reply_options: [] }, x, y, tempId);
+        idToNode[tempId] = nid;
+        nodeToId[nid] = tempId;
+    };
+
+    document.getElementById('btn-save').onclick = saveGraph;
+    document.getElementById('btn-zoom-in').onclick = () => editor.zoom_in();
+    document.getElementById('btn-zoom-out').onclick = () => editor.zoom_out();
+
+    editor.on('nodeSelected', id => showSidebar(id));
+    editor.on('nodeUnselected', () => hideSidebar());
+
+    loadGraph();
+})();
+</script>
+{% endblock %}

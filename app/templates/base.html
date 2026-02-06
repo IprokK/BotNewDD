@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Quest Platform{% endblock %}</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg: var(--tg-theme-bg-color, #0f1419);
+            --surface: var(--tg-theme-secondary-bg-color, #1a2332);
+            --border: #2d3a4d;
+            --text: var(--tg-theme-text-color, #e6edf3);
+            --muted: #8b949e;
+            --accent: var(--tg-theme-button-color, #58a6ff);
+            --success: #3fb950;
+            --warning: #d29922;
+            --error: #f85149;
+            --radius: 12px;
+            --font: 'Segoe UI', system-ui, sans-serif;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+        .container { max-width: 480px; margin: 0 auto; padding: 16px; }
+        .card { background: var(--surface); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; border: 1px solid var(--border); }
+        .card h2 { margin: 0 0 12px; font-size: 1.1rem; color: var(--accent); }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.85rem; }
+        .badge-roam, .badge-free_roam { background: rgba(63, 185, 80, 0.2); color: var(--success); }
+        .badge-assigned { background: rgba(88, 166, 255, 0.2); color: var(--accent); }
+        .badge-visit, .badge-in_visit { background: rgba(210, 153, 34, 0.2); color: var(--warning); }
+        .badge-finished { background: rgba(139, 148, 158, 0.2); color: var(--muted); }
+        button, .btn { background: var(--accent); color: #fff; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-size: 1rem; }
+        button:hover, .btn:hover { opacity: 0.9; }
+        input, select, textarea { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); margin-bottom: 12px; }
+        label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9rem; }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    {% block body %}
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+    {% endblock %}
+    {% block scripts %}{% endblock %}
+</body>
+</html>

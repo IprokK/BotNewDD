@@ -1,0 +1,107 @@
+{% extends "admin/base.html" %}
+{% block title %}Live Ops{% endblock %}
+{% block content %}
+<style>
+    .board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; min-height: 400px; }
+    .board-column { background: var(--admin-surface); border: 2px dashed var(--admin-border); border-radius: 12px; padding: 16px; min-height: 360px; }
+    .board-column.drag-over { border-color: var(--admin-accent); background: rgba(88,166,255,0.1); }
+    .board-column h3 { margin: 0 0 16px; font-size: 0.95rem; color: var(--admin-muted); padding-bottom: 8px; border-bottom: 1px solid var(--admin-border); }
+    .team-card { background: var(--admin-bg); padding: 12px 16px; border-radius: 8px; margin-bottom: 8px; font-size: 0.9rem; cursor: grab; border: 1px solid transparent; transition: all .15s; }
+    .team-card:hover { border-color: var(--admin-border); }
+    .team-card.dragging { opacity: 0.7; cursor: grabbing; }
+    .team-card strong { display: block; margin-bottom: 4px; }
+    .team-card small { color: var(--admin-muted); }
+    .create-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+    .create-form input { flex: 1; min-width: 160px; }
+</style>
+
+<h2>Live Ops Board</h2>
+<div class="board" id="board">
+    <div class="board-column" data-state="free_roam">
+        <h3>🟢 Free Roam</h3>
+        <div class="column-cards" id="col-free_roam">
+            {% for team, st in by_state.get('free_roam', []) %}
+            <div class="team-card" draggable="true" data-team-id="{{ team.id }}">{{ team.name }} <small>{{ team.score_total }} очк.</small></div>
+            {% else %}<p class="muted" style="color:var(--admin-muted);font-size:0.9rem;">—</p>{% endfor %}
+        </div>
+    </div>
+    <div class="board-column" data-state="assigned">
+        <h3>🔵 Assigned</h3>
+        <div class="column-cards" id="col-assigned">
+            {% for team, st in by_state.get('assigned', []) %}
+            <div class="team-card" draggable="true" data-team-id="{{ team.id }}">{{ team.name }} <small>@ {{ st.name if st else '?' }}</small></div>
+            {% else %}<p class="muted" style="color:var(--admin-muted);font-size:0.9rem;">—</p>{% endfor %}
+        </div>
+    </div>
+    <div class="board-column" data-state="in_visit">
+        <h3>🟡 In Visit</h3>
+        <div class="column-cards" id="col-in_visit">
+            {% for team, st in by_state.get('in_visit', []) %}
+            <div class="team-card" draggable="true" data-team-id="{{ team.id }}">{{ team.name }} <small>@ {{ st.name if st else '?' }}</small></div>
+            {% else %}<p class="muted" style="color:var(--admin-muted);font-size:0.9rem;">—</p>{% endfor %}
+        </div>
+    </div>
+    <div class="board-column" data-state="finished">
+        <h3>✅ Finished</h3>
+        <div class="column-cards" id="col-finished">
+            {% for team, st in by_state.get('finished', []) %}
+            <div class="team-card" draggable="true" data-team-id="{{ team.id }}">{{ team.name }} <small>{{ team.score_total }} очк.</small></div>
+            {% else %}<p class="muted" style="color:var(--admin-muted);font-size:0.9rem;">—</p>{% endfor %}
+        </div>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 24px; display: flex; gap: 32px; flex-wrap: wrap;">
+    <div>
+    <h3>Создать команду</h3>
+    <form class="create-form" hx-post="/admin/teams" hx-target="body" hx-swap="none" hx-on::after-request="if(event.detail.successful) location.reload()">
+        <input type="text" name="name" placeholder="Название команды" required>
+        <button type="submit">Создать</button>
+    </form>
+    </div>
+    <div>
+    <h3>Создать станцию</h3>
+    <form class="create-form" hx-post="/admin/stations" hx-target="body" hx-swap="none" hx-on::after-request="if(event.detail.successful) location.reload()">
+        <input type="text" name="name" placeholder="Название станции" required>
+        <input type="number" name="capacity" value="2" min="1" style="width:80px;">
+        <button type="submit">Создать</button>
+    </form>
+    </div>
+</div>
+
+<script>
+(function() {
+    const cols = document.querySelectorAll('.board-column');
+    cols.forEach(col => {
+        col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('drag-over'); });
+        col.addEventListener('dragleave', () => col.classList.remove('drag-over'));
+        col.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            col.classList.remove('drag-over');
+            const teamId = e.dataTransfer.getData('team-id');
+            const newState = col.dataset.state;
+            if (!teamId) return;
+            let stationId = null;
+            const stations = [{% for s in stations %}{id: {{ s.id }}, name: "{{ s.name | e }}"}{% if not loop.last %}, {% endif %}{% endfor %}];
+            if ((newState === 'assigned' || newState === 'in_visit') && stations.length) {
+                const choice = prompt('Введите ID станции:\n' + stations.map(s => s.id + ' — ' + s.name).join('\n'));
+                if (choice) stationId = parseInt(choice) || stations.find(s => s.name.includes(choice))?.id;
+            }
+            const res = await fetch(`/admin/teams/${teamId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ state: newState, station_id: stationId })
+            });
+            if (res.ok) location.reload();
+        });
+    });
+    document.querySelectorAll('.team-card').forEach(card => {
+        card.addEventListener('dragstart', e => {
+            e.dataTransfer.setData('team-id', card.dataset.teamId);
+            card.classList.add('dragging');
+        });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    });
+})();
+</script>
+{% endblock %}

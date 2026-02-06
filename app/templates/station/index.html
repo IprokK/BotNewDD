@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Станция {{ station.name }}{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>{{ station.name }}</h2>
+    <p id="scanned-team" style="min-height: 60px;"></p>
+    <button id="scan-btn" onclick="startScan()">📷 Сканировать QR</button>
+    <div id="visit-actions" style="display: none; margin-top: 16px;">
+        <button id="start-btn" onclick="startVisit()">Начать визит</button>
+        <button id="finish-btn" onclick="showFinishForm()" style="display: none;">Завершить визит</button>
+    </div>
+</div>
+
+<div id="finish-form" class="card" style="display: none;">
+    <h2>Завершение визита</h2>
+    <form id="finish-frm" onsubmit="finishVisit(event)">
+        <label>Очки</label>
+        <input type="number" name="points_awarded" value="0" min="0">
+        <label>Оценка команды (1-5)</label>
+        <input type="number" name="host_rating" min="1" max="5">
+        <label>Заметки</label>
+        <textarea name="host_notes" rows="3"></textarea>
+        <button type="submit">Завершить</button>
+    </form>
+</div>
+
+<div id="scanner-container" style="margin-top: 16px;"></div>
+<div id="result" style="margin-top: 16px;"></div>
+{% endblock %}
+{% block scripts %}
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+let scannedToken = null;
+let scannedTeamId = null;
+let qrScanner = null;
+
+async function startScan() {
+    const container = document.getElementById('scanner-container');
+    const resultDiv = document.getElementById('result');
+    resultDiv.innerHTML = '';
+    container.innerHTML = '<p>Запуск камеры...</p>';
+    if (typeof Html5Qrcode !== 'undefined') {
+        container.innerHTML = '<div id="qr-reader"></div>';
+        qrScanner = new Html5Qrcode('qr-reader');
+        try {
+            await qrScanner.start(
+                { facingMode: 'environment' },
+                { fps: 5, qrbox: { width: 250, height: 250 } },
+                (decoded) => {
+                    stopScan();
+                    submitScan(decoded);
+                },
+                () => {}
+            );
+        } catch (e) {
+            container.innerHTML = '<p>Камера недоступна. Введите токен вручную:</p>' +
+                '<input type="text" id="manual-token" placeholder="Токен из QR">' +
+                '<button onclick="submitScan(document.getElementById(\'manual-token\').value)">Проверить</button>';
+        }
+    } else {
+        container.innerHTML = '<input type="text" id="manual-token" placeholder="Вставьте токен из QR">' +
+            '<button onclick="submitScan(document.getElementById(\'manual-token\').value)">Проверить</button>';
+    }
+}
+function stopScan() {
+    if (qrScanner && qrScanner.isScanning) qrScanner.stop();
+    document.getElementById('scanner-container').innerHTML = '';
+}
+
+async function submitScan(token) {
+    const res = await fetch('/station/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cookie': document.cookie },
+        credentials: 'include',
+        body: JSON.stringify({ token })
+    });
+    const data = await res.json();
+    if (data.ok) {
+        scannedToken = token;
+        scannedTeamId = data.team.id;
+        document.getElementById('scanned-team').innerHTML = `
+            <strong>${data.team.name}</strong><br>
+            Очки: ${data.team.score_total}<br>
+            Игроков: ${data.team.players.length}
+        `;
+        document.getElementById('visit-actions').style.display = 'block';
+        if (data.visit_state === 'started') {
+            document.getElementById('start-btn').style.display = 'none';
+            document.getElementById('finish-btn').style.display = 'inline';
+        }
+    } else {
+        document.getElementById('result').innerHTML = '<p style="color: var(--error)">' + (data.error || 'Ошибка') + '</p>';
+        document.getElementById('scanned-team').innerHTML = '';
+    }
+}
+
+async function startVisit() {
+    const res = await fetch('/station/visit/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ team_id: scannedTeamId })
+    });
+    const data = await res.json();
+    if (data.ok) {
+        document.getElementById('start-btn').style.display = 'none';
+        document.getElementById('finish-btn').style.display = 'inline';
+    }
+}
+
+function showFinishForm() {
+    document.getElementById('finish-form').style.display = 'block';
+}
+
+async function finishVisit(e) {
+    e.preventDefault();
+    const f = document.getElementById('finish-frm');
+    const fd = new FormData(f);
+    const res = await fetch('/station/visit/finish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+            team_id: scannedTeamId,
+            points_awarded: parseInt(fd.get('points_awarded') || 0),
+            host_rating: parseInt(fd.get('host_rating') || 0) || null,
+            host_notes: fd.get('host_notes') || null
+        })
+    });
+    const data = await res.json();
+    if (data.ok) {
+        document.getElementById('scanned-team').innerHTML = 'Визит завершён';
+        document.getElementById('visit-actions').style.display = 'none';
+        document.getElementById('finish-form').style.display = 'none';
+        scannedToken = null;
+        scannedTeamId = null;
+    }
+}
+</script>
+{% endblock %}

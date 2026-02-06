@@ -1,0 +1,222 @@
+{% extends "player/base_app.html" %}
+{% block team_name %}{{ team.name if team else '—' }}{% endblock %}
+{% block player_role %}{{ player_role }}{% endblock %}
+{% block points %}{{ team.score_total if team else 0 }}{% endblock %}
+
+{% block sticky_banner %}
+{% if team and station and team.current_state in ('assigned', 'in_visit') %}
+<div class="sticky-banner" onclick="document.querySelector('[data-screen=status]').click()">
+    📍 Вам назначена станция: {{ station.name }} — нажми для деталей
+</div>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<!-- Screen 1: Предметы -->
+<div class="screen active" id="screen-items">
+    <h2 style="margin:0 0 16px;font-size:1.25rem;">Инвентарь</h2>
+    <div class="item-grid">
+        <div class="item-card" onclick="openItem('phone')">
+            <div class="item-icon">📱</div>
+            <div class="item-name">Ваш телефон</div>
+            <div class="item-desc">Чаты, напарник, сканер</div>
+        </div>
+        <div class="item-card" onclick="openItem('diary')">
+            <div class="item-icon">📖</div>
+            <div class="item-name">Личный дневник</div>
+            <div class="item-desc">Страницы, заметки</div>
+        </div>
+        <div class="item-card" onclick="openItem('witch')">
+            <div class="item-icon">📕</div>
+            <div class="item-name">Методичка ведьмы</div>
+            <div class="item-desc">Рецепты, заклинания</div>
+        </div>
+        <div class="item-card" onclick="openItem('other-phone')">
+            <div class="item-icon">📱</div>
+            <div class="item-name">Чужой телефон</div>
+            <div class="item-desc">Архив переписок</div>
+        </div>
+    </div>
+</div>
+
+<!-- Screen 2: Квест -->
+<div class="screen" id="screen-quest">
+    <h2 style="margin:0 0 16px;font-size:1.25rem;">Квест</h2>
+    <div style="background:var(--surface);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);margin-bottom:16px;">
+        <h3 style="margin:0 0 12px;font-size:0.95rem;color:var(--muted);">Главная цель</h3>
+        <p style="margin:0;">{% if station %}Направиться на станцию «{{ station.name }}»{% else %}Следуйте подсказкам и исследуйте локации{% endif %}</p>
+    </div>
+    <h3 style="margin:0 0 12px;font-size:0.95rem;">Улики и подсказки</h3>
+    {% for block, delivery in deliveries %}
+    <div style="background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:8px;box-shadow:var(--shadow);border-left:4px solid var(--accent);">
+        <strong>{{ block.key }}</strong>
+        <p style="margin:8px 0 0;font-size:0.9rem;">{{ block.payload.get('text', '') | default('', true) }}</p>
+    </div>
+    {% else %}
+    <p style="color:var(--muted);">Пока нет улик</p>
+    {% endfor %}
+</div>
+
+<!-- Screen 3: Чаты -->
+<div class="screen" id="screen-chats">
+    <h2 style="margin:0 0 16px;font-size:1.25rem;">Чаты</h2>
+    {% for t in threads %}
+    <a href="/player/dialogues/{{ t.key }}" style="display:block;background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:8px;box-shadow:var(--shadow);text-decoration:none;color:inherit;">
+        <strong>{{ t.title or t.key }}</strong>
+        <span style="color:var(--muted);font-size:0.85rem;"> — {{ t.type }}</span>
+    </a>
+    {% else %}
+    <p style="color:var(--muted);">Нет диалогов</p>
+    {% endfor %}
+</div>
+
+<!-- Screen 4: Статус -->
+<div class="screen" id="screen-status">
+    <h2 style="margin:0 0 16px;font-size:1.25rem;">Статус</h2>
+    <div style="background:var(--surface);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow);margin-bottom:16px;">
+        <p style="margin:0 0 12px;"><strong>Режим:</strong> 
+            {% if team.current_state == 'free_roam' %}🟢 Свободное перемещение
+            {% elif team.current_state == 'assigned' %}🔵 Назначена станция
+            {% elif team.current_state == 'in_visit' %}🟡 На станции
+            {% elif team.current_state == 'finished' %}✅ Завершён
+            {% else %}{{ team.current_state }}{% endif %}
+        </p>
+        {% if station %}
+        <p style="margin:0 0 12px;"><strong>Куда идти:</strong> {{ station.name }}</p>
+        <p style="margin:0;font-size:0.9rem;color:var(--muted);">Покажите QR ведущему при прибытии</p>
+        {% else %}
+        <p style="margin:0;color:var(--muted);">Ожидайте назначения станции</p>
+        {% endif %}
+    </div>
+    <button class="qr-btn" style="width:100%;padding:14px;border-radius:var(--radius);" onclick="document.getElementById('qr-open').click()">
+        📱 Показать QR команды
+    </button>
+    {% if pending_ratings %}
+    <div style="margin-top:20px;">
+        <h3 style="font-size:0.95rem;">⭐ Оценить станции</h3>
+        {% for visit, st in pending_ratings %}
+        <a href="/player/rating?visit_id={{ visit.id }}" style="display:block;padding:12px;background:var(--surface);border-radius:var(--radius-sm);margin-top:8px;text-decoration:none;color:var(--accent);">Оценить «{{ st.name }}»</a>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Item overlays (phone, diary, etc.) - shown when item tapped -->
+<div id="item-phone" class="screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--surface);z-index:200;display:none;overflow-y:auto;">
+    <div style="padding:16px;padding-top:50px;">
+        <button onclick="closeItem()" style="margin-bottom:16px;padding:8px 16px;background:var(--border);border:none;border-radius:var(--radius-sm);cursor:pointer;">← Назад</button>
+        <h2 style="margin:0 0 16px;">📱 Ваш телефон</h2>
+        <div style="display:flex;gap:8px;margin-bottom:20px;overflow-x:auto;padding-bottom:8px;">
+            <button class="phone-tab active" data-tab="chats">Чаты</button>
+            <button class="phone-tab" data-tab="partner">Напарник</button>
+            <button class="phone-tab" data-tab="scanner">Сканер</button>
+        </div>
+        <div id="phone-chats" class="phone-panel">
+            {% for t in threads %}
+            <a href="/player/dialogues/{{ t.key }}" style="display:block;padding:14px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:8px;text-decoration:none;color:inherit;">{{ t.title or t.key }}</a>
+            {% else %}<p style="color:var(--muted);">Нет чатов</p>{% endfor %}
+        </div>
+        <div id="phone-partner" class="phone-panel" style="display:none;">
+            <p style="color:var(--muted);">Чат с напарником — откройте диалог из списка выше</p>
+        </div>
+        <div id="phone-scanner" class="phone-panel" style="display:none;">
+            <button onclick="startScanner()" style="width:100%;padding:16px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;font-size:1rem;">📷 Сканировать QR / штрихкод</button>
+            <div id="scan-result" style="margin-top:16px;"></div>
+        </div>
+    </div>
+</div>
+<div id="item-diary" class="screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--surface);z-index:200;display:none;overflow-y:auto;">
+    <div style="padding:16px;padding-top:50px;">
+        <button onclick="closeItem()" style="margin-bottom:16px;padding:8px 16px;background:var(--border);border:none;border-radius:var(--radius-sm);cursor:pointer;">← Назад</button>
+        <h2 style="margin:0 0 16px;">📖 Дневник</h2>
+        <p style="color:var(--muted);">Страницы дневника появятся по мере прохождения квеста</p>
+    </div>
+</div>
+<div id="item-witch" class="screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--surface);z-index:200;display:none;overflow-y:auto;">
+    <div style="padding:16px;padding-top:50px;">
+        <button onclick="closeItem()" style="margin-bottom:16px;padding:8px 16px;background:var(--border);border:none;border-radius:var(--radius-sm);cursor:pointer;">← Назад</button>
+        <h2 style="margin:0 0 16px;">📕 Методичка ведьмы</h2>
+        <p style="color:var(--muted);">Рецепты и заклинания откроются на станциях</p>
+    </div>
+</div>
+<div id="item-other-phone" class="screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--surface);z-index:200;display:none;overflow-y:auto;">
+    <div style="padding:16px;padding-top:50px;">
+        <button onclick="closeItem()" style="margin-bottom:16px;padding:8px 16px;background:var(--border);border:none;border-radius:var(--radius-sm);cursor:pointer;">← Назад</button>
+        <h2 style="margin:0 0 16px;">📱 Чужой телефон</h2>
+        <p style="color:var(--muted);">Архив переписок — читайте только</p>
+        {% for t in threads %}
+        <a href="/player/dialogues/{{ t.key }}" style="display:block;padding:14px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:8px;text-decoration:none;color:inherit;">{{ t.title or t.key }}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    if (typeof Telegram !== 'undefined' && Telegram.WebApp) {
+        Telegram.WebApp.ready();
+        Telegram.WebApp.expand();
+        if (Telegram.WebApp.MainButton) Telegram.WebApp.MainButton.hide();
+    }
+    const qrToken = '{{ team.qr_token or "" }}';
+    const qrModal = document.getElementById('qr-modal');
+    const qrOpen = document.getElementById('qr-open');
+    const qrClose = document.getElementById('qr-close');
+    qrOpen.onclick = () => {
+        if (qrToken && typeof QRCode !== 'undefined') {
+            document.getElementById('qr-code').innerHTML = '';
+            new QRCode(document.getElementById('qr-code'), { text: qrToken, width: 200, height: 200 });
+            document.getElementById('qr-team-label').textContent = '{{ team.name if team else "" }}';
+            qrModal.classList.add('show');
+        }
+    };
+    qrClose.onclick = () => qrModal.classList.remove('show');
+    qrModal.onclick = (e) => { if (e.target === qrModal) qrModal.classList.remove('show'); };
+    document.querySelectorAll('.nav-item').forEach(el => {
+        el.addEventListener('click', function(e) {
+            e.preventDefault();
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            this.classList.add('active');
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            const screen = document.getElementById('screen-' + this.dataset.screen);
+            if (screen) screen.classList.add('active');
+        });
+    });
+    document.querySelectorAll('.phone-tab').forEach(t => {
+        t.addEventListener('click', function() {
+            document.querySelectorAll('.phone-tab').forEach(x => x.classList.remove('active'));
+            this.classList.add('active');
+            document.querySelectorAll('.phone-panel').forEach(p => p.style.display = 'none');
+            const p = document.getElementById('phone-' + this.dataset.tab);
+            if (p) p.style.display = 'block';
+        });
+    });
+    window.openItem = function(id) {
+        document.getElementById('item-' + id).style.display = 'block';
+    };
+    window.closeItem = function() {
+        document.querySelectorAll('[id^="item-"]').forEach(el => { if (el.id.startsWith('item-')) el.style.display = 'none'; });
+    };
+    window.startScanner = function() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            document.getElementById('scan-result').innerHTML = '<p>Камера недоступна. Введите код вручную или используйте камеру телефона.</p><input type="text" placeholder="Код" style="padding:10px;width:100%;"><button onclick="alert(\'Добавлено\')" style="margin-top:8px;">Проверить</button>';
+            return;
+        }
+        document.getElementById('scan-result').innerHTML = '<p>Запуск камеры...</p>';
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(stream => {
+            const v = document.createElement('video');
+            v.srcObject = stream;
+            v.autoplay = true;
+            v.style.width = '100%';
+            v.style.borderRadius = '8px';
+            document.getElementById('scan-result').innerHTML = '';
+            document.getElementById('scan-result').appendChild(v);
+            document.getElementById('scan-result').innerHTML += '<p style="margin-top:12px;">Для полноценного сканирования QR установите приложение или введите код вручную</p>';
+        }).catch(() => {
+            document.getElementById('scan-result').innerHTML = '<p>Нет доступа к камере</p>';
+        });
+    };
+})();
+</script>
+{% endblock %}

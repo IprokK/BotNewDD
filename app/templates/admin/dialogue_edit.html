@@ -1,0 +1,109 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ thread.title or thread.key }}{% endblock %}
+{% block content %}
+<style>
+    .dialog-editor { display: grid; grid-template-columns: 1fr 380px; gap: 24px; }
+    @media (max-width: 1000px) { .dialog-editor { grid-template-columns: 1fr; } }
+    .msg-item { padding: 14px 16px; background: var(--admin-bg); border-radius: 8px; margin-bottom: 8px; cursor: grab; border-left: 4px solid var(--admin-accent); }
+    .msg-item .meta { font-size: 0.8rem; color: var(--admin-muted); margin-bottom: 6px; }
+    .msg-item .text { margin: 0; }
+    .msg-item .edit-btn { float: right; padding: 4px 8px; font-size: 0.8rem; }
+    .form-grid { display: grid; gap: 12px; }
+    .form-grid label { display: block; font-size: 0.85rem; color: var(--admin-muted); margin-bottom: 4px; }
+    .reply-opts { border: 1px dashed var(--admin-border); padding: 12px; border-radius: 6px; margin-top: 8px; }
+    .reply-opts-row { display: flex; gap: 8px; margin-bottom: 8px; }
+    .reply-opts-row input { flex: 1; }
+</style>
+
+<p><a href="/admin/dialogues" style="color:var(--admin-accent);">← К списку диалогов</a> · <a href="/admin/dialogues/{{ thread.id }}/graph" style="color:var(--admin-accent);">📊 Редактор графа</a></p>
+<h2>{{ thread.title or thread.key }}</h2>
+<p style="color:var(--admin-muted);">Тип: {{ thread.type }} | Ключ: {{ thread.key }}</p>
+
+<div class="dialog-editor">
+    <div class="card">
+        <h3>Сообщения (перетаскивайте для порядка)</h3>
+        <div class="msg-list" id="msg-list">
+            {% for m in messages %}
+            <div class="msg-item" data-id="{{ m.id }}">
+                <div class="meta">От: {{ m.payload.get('character', '—') }} → Кому: {{ m.audience }}
+                    {% if m.gate_rules and m.gate_rules.get('condition_type') != 'immediate' %}
+                    | {{ m.gate_rules.condition_type }}
+                    {% endif %}
+                </div>
+                <div class="text">{{ m.payload.get('text', '')[:120] }}{% if (m.payload.get('text') or '')|length > 120 %}...{% endif %}</div>
+                {% if m.payload.get('reply_options') %}<small>Варианты ответа: {{ m.payload.reply_options|length }}</small>{% endif %}
+            </div>
+            {% else %}
+            <p style="color:var(--admin-muted);">Нет сообщений</p>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="card">
+        <h3>Добавить сообщение</h3>
+        <form method="post" action="/admin/dialogues/{{ thread.id }}/messages" class="form-grid">
+            <div>
+                <label>От чьего имени (отправитель)</label>
+                <input type="text" name="character" placeholder="Режиссёр, Костюмер, Напарник...">
+            </div>
+            <div>
+                <label>Кому показывать</label>
+                <select name="audience"><option value="TEAM">Вся команда</option><option value="ROLE_A">Роль A</option><option value="ROLE_B">Роль B</option></select>
+            </div>
+            <div>
+                <label>Текст сообщения</label>
+                <textarea name="text" rows="4" required placeholder="Текст сообщения"></textarea>
+            </div>
+            <div>
+                <label>Условие показа</label>
+                <select name="condition_type" id="cond-type">
+                    <option value="immediate">Сразу</option>
+                    <option value="scheduled">По расписанию</option>
+                    <option value="after_station">После посещения станции</option>
+                    <option value="after_message">После ответа на сообщение</option>
+                </select>
+            </div>
+            <div id="cond-scheduled" style="display:none;">
+                <label>Дата и время</label>
+                <input type="datetime-local" name="scheduled_at">
+            </div>
+            <div id="cond-station" style="display:none;">
+                <label>Станция</label>
+                <select name="station_id"><option value="">—</option>{% for s in stations %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
+            </div>
+            <div id="cond-message" style="display:none;">
+                <label>После сообщения ID</label>
+                <input type="number" name="after_message_id" placeholder="ID сообщения">
+            </div>
+            <div>
+                <label>Варианты ответа (JSON, для интерактивных)</label>
+                <textarea name="reply_options" rows="4" placeholder='[{"text": "Согласен", "next_message_id": 2, "delay_seconds": 10}, {"text": "Отказ", "next_message_id": 3}]'></textarea>
+                <small style="color:var(--admin-muted);">next_message_id — ID сообщения после выбора; delay_seconds — задержка перед показом (сек)</small>
+            </div>
+            <button type="submit">Добавить</button>
+        </form>
+    </div>
+</div>
+
+<script>
+(function() {
+    const ct = document.getElementById('cond-type');
+    const show = (id, v) => { const e = document.getElementById(id); if (e) e.style.display = v ? 'block' : 'none'; };
+    ct.onchange = () => {
+        show('cond-scheduled', ct.value === 'scheduled');
+        show('cond-station', ct.value === 'after_station');
+        show('cond-message', ct.value === 'after_message');
+    };
+    const list = document.getElementById('msg-list');
+    if (list && typeof Sortable !== 'undefined') {
+        new Sortable(list, {
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            onEnd: async function() {
+                const ids = Array.from(list.querySelectorAll('.msg-item')).map(el => el.dataset.id).filter(Boolean);
+                await fetch('/admin/dialogues/messages/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
+            }
+        });
+    }
+})();
+</script>
+{% endblock %}

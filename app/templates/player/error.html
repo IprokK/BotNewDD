@@ -1,0 +1,10 @@
+{% extends "player/base_app.html" %}
+{% block team_name %}—{% endblock %}
+{% block player_role %}—{% endblock %}
+{% block points %}0{% endblock %}
+{% block content %}
+<div style="text-align:center;padding:40px 20px;">
+    <p>{{ message }}</p>
+    <a href="/player" style="color:var(--accent);text-decoration:none;">← Назад</a>
+</div>
+{% endblock %}

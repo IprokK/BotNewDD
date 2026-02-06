@@ -1,0 +1,27 @@
+{% extends "admin/base.html" %}
+{% block title %}Аналитика{% endblock %}
+{% block content %}
+<h2>Аналитика</h2>
+<div class="card">
+    <h3>Рейтинги станций</h3>
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+        <thead><tr style="background: var(--admin-bg);"><th style="padding:10px;text-align:left;">Станция</th><th>Ср. станции</th><th>Ср. ведущего</th><th>Кол-во</th></tr></thead>
+        <tr><th>Станция</th><th>Средняя оценка станции</th><th>Средняя оценка ведущего</th><th>Кол-во</th></tr>
+        {% for name, avg_st, avg_host, cnt in station_stats %}
+        <tr><td>{{ name }}</td><td>{{ "%.1f"|format(avg_st or 0) }}</td><td>{{ "%.1f"|format(avg_host or 0) }}</td><td>{{ cnt }}</td></tr>
+        {% else %}
+        <tr><td colspan="4">Нет данных</td></tr>
+        {% endfor %}
+    </table>
+</div>
+<div class="card">
+    <h3>Лидерборд</h3>
+    <ol>
+    {% for name, score in leaderboard %}
+    <li>{{ name }} — {{ score }}</li>
+    {% else %}
+    <li>Нет данных</li>
+    {% endfor %}
+    </ol>
+</div>
+{% endblock %}

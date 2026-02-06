@@ -1,0 +1,24 @@
+{% extends "admin/base.html" %}
+{% block title %}Контент{% endblock %}
+{% block content %}
+<h2>Контент</h2>
+<div class="card">
+    <h3>Создать блок</h3>
+    <form method="post" action="/admin/content" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:20px;">
+        <div><label style="display:block;margin-bottom:4px;color:var(--admin-muted);font-size:0.85rem;">Ключ</label><input type="text" name="key" required></div>
+        <div><label style="display:block;margin-bottom:4px;color:var(--admin-muted);font-size:0.85rem;">Текст</label><input type="text" name="text" placeholder="Содержимое"></div>
+        <div><label style="display:block;margin-bottom:4px;color:var(--admin-muted);font-size:0.85rem;">Аудитория</label><select name="audience"><option value="TEAM">TEAM</option><option value="ROLE_A">ROLE_A</option><option value="ROLE_B">ROLE_B</option></select></div>
+        <button type="submit">Создать</button>
+    </form>
+</div>
+<div class="card">
+    <h3>Блоки контента</h3>
+    <ul style="list-style:none;padding:0;">
+    {% for b in blocks %}
+    <li style="padding:8px 0;border-bottom:1px solid var(--admin-border);"><a href="/admin/content/{{ b.id }}" style="color:var(--admin-accent);">{{ b.key }}</a> <span style="color:var(--admin-muted);">(v{{ b.version }}, {{ b.audience }})</span></li>
+    {% else %}
+    <li>Нет блоков</li>
+    {% endfor %}
+    </ul>
+</div>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "player/base_app.html" %}
+{% block team_name %}—{% endblock %}
+{% block player_role %}—{% endblock %}
+{% block points %}0{% endblock %}
+{% block content %}
+<div style="text-align:center;padding:40px 20px;">
+    <p style="font-size:1.1rem;margin:0 0 16px;">{{ message }}</p>
+    <p style="color:var(--muted);font-size:0.9rem;">Организаторы добавят вас в команду.<br>Обновите страницу позже.</p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function() {
+    if (typeof Telegram !== 'undefined' && Telegram.WebApp) {
+        Telegram.WebApp.ready();
+        Telegram.WebApp.expand();
+    }
+    document.querySelector('.bottom-nav').style.display = 'none';
+    document.getElementById('qr-open').style.display = 'none';
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "player/base_app.html" %}
+{% block team_name %}{{ team.name if team else '—' }}{% endblock %}
+{% block player_role %}{{ player_role }}{% endblock %}
+{% block points %}{{ team.score_total if team else 0 }}{% endblock %}
+{% block content %}
+<div style="max-width:400px;margin:0 auto;">
+    <a href="/player" style="color:var(--accent);text-decoration:none;font-size:0.9rem;">← Назад</a>
+    <h2 style="margin:16px 0;">Оцените станцию {{ station.name }}</h2>
+    <form method="post" action="/player/rating" style="background:var(--surface);padding:24px;border-radius:var(--radius);box-shadow:var(--shadow);">
+        <input type="hidden" name="visit_id" value="{{ visit.id }}">
+        <label style="display:block;margin-bottom:8px;color:var(--muted);font-size:0.9rem;">Оценка станции (1-5)</label>
+        <input type="number" name="station_rating" min="1" max="5" required style="width:100%;padding:12px;margin-bottom:16px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+        <label style="display:block;margin-bottom:8px;color:var(--muted);font-size:0.9rem;">Оценка ведущего (1-5)</label>
+        <input type="number" name="host_rating" min="1" max="5" required style="width:100%;padding:12px;margin-bottom:16px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+        <label style="display:block;margin-bottom:8px;color:var(--muted);font-size:0.9rem;">Комментарий</label>
+        <textarea name="comment" rows="3" style="width:100%;padding:12px;margin-bottom:16px;border-radius:var(--radius-sm);border:1px solid var(--border);"></textarea>
+        <button type="submit" style="width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:1rem;">Отправить</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "admin/base.html" %}
+{% block title %}Диалоги{% endblock %}
+{% block content %}
+<style>
+    .thread-list { display: grid; gap: 12px; }
+    .thread-item { display: flex; align-items: center; justify-content: space-between; padding: 16px; background: var(--admin-surface); border: 1px solid var(--admin-border); border-radius: 8px; }
+    .thread-item:hover { border-color: var(--admin-accent); }
+    .thread-item a { color: var(--admin-text); text-decoration: none; flex: 1; }
+    .thread-item .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; background: var(--admin-bg); }
+    .msg-list { min-height: 100px; }
+    .msg-item { padding: 12px; background: var(--admin-bg); border-radius: 8px; margin-bottom: 8px; cursor: grab; border-left: 4px solid var(--admin-accent); }
+</style>
+
+<h2>Диалоги и чаты</h2>
+<div class="card">
+    <h3>Создать диалог</h3>
+    <form hx-post="/admin/dialogues" hx-target="body" hx-swap="none" hx-on::after-request="if(event.detail.successful) location.reload()" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;">
+        <div><label style="display:block;margin-bottom:4px;color:var(--admin-muted);font-size:0.85rem;">Ключ</label><input type="text" name="key" placeholder="dialog_key" required></div>
+        <div><label style="display:block;margin-bottom:4px;color:var(--admin-muted);font-size:0.85rem;">Название</label><input type="text" name="title" placeholder="Заголовок"></div>
+        <div><label style="display:block;margin-bottom:4px;color:var(--admin-muted);font-size:0.85rem;">Тип</label>
+            <select name="type"><option value="LEAKED">LEAKED</option><option value="INTERACTIVE">INTERACTIVE</option></select>
+        </div>
+        <button type="submit">Создать</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Список диалогов</h3>
+    <div class="thread-list">
+        {% for t in threads %}
+        <div class="thread-item">
+            <a href="/admin/dialogues/{{ t.id }}/graph" style="display:flex;align-items:center;gap:8px;">
+                <strong>{{ t.title or t.key }}</strong>
+                <span class="badge">{{ t.type }}</span>
+                <small style="color:var(--admin-muted);"> — {{ t.messages|length }} сообщ.</small>
+            </a>
+            <a href="/admin/dialogues/{{ t.id }}" style="color:var(--admin-muted);font-size:0.85rem;">список</a>
+            <form hx-delete="/admin/dialogues/{{ t.id }}" hx-target="closest .thread-item" hx-swap="outerHTML swap:1s" style="margin:0;">
+                <button type="submit" class="btn-ghost">Удалить</button>
+            </form>
+        </div>
+        {% else %}
+        <p style="color:var(--admin-muted);">Нет диалогов</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

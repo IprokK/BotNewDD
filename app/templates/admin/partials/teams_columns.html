@@ -1,0 +1,4 @@
+<div class="column"><h3>Free Roam</h3>{% for team, st in by_state.get('free_roam', []) %}<div class="team-card">{{ team.name }} — {{ team.score_total }}</div>{% else %}<p class="muted">—</p>{% endfor %}</div>
+<div class="column"><h3>Assigned</h3>{% for team, st in by_state.get('assigned', []) %}<div class="team-card">{{ team.name }} @ {{ st.name if st else '?' }}</div>{% else %}<p class="muted">—</p>{% endfor %}</div>
+<div class="column"><h3>In Visit</h3>{% for team, st in by_state.get('in_visit', []) %}<div class="team-card">{{ team.name }} @ {{ st.name if st else '?' }}</div>{% else %}<p class="muted">—</p>{% endfor %}</div>
+<div class="column"><h3>Finished</h3>{% for team, st in by_state.get('finished', []) %}<div class="team-card">{{ team.name }} — {{ team.score_total }}</div>{% else %}<p class="muted">—</p>{% endfor %}</div>

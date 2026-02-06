@@ -1,0 +1,12 @@
+<div class="card">
+    <h2>📍 Прогресс команды</h2>
+    {% if team %}
+    <p><span class="badge badge-{{ team.current_state or 'roam' }}">{{ team.current_state or 'free_roam' }}</span></p>
+    <p>Очки: <strong>{{ team.score_total }}</strong></p>
+    {% if station %}
+    <p>Станция: <strong>{{ station.name }}</strong></p>
+    {% endif %}
+    {% else %}
+    <p>Ожидание назначения...</p>
+    {% endif %}
+</div>

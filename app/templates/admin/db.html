@@ -1,0 +1,54 @@
+{% extends "admin/base.html" %}
+{% block title %}База данных{% endblock %}
+{% block content %}
+<style>
+    .db-layout { display: flex; gap: 24px; }
+    .db-sidebar { width: 200px; flex-shrink: 0; }
+    .db-sidebar a { display: block; padding: 10px 16px; border-radius: 6px; margin-bottom: 4px; color: var(--admin-text); text-decoration: none; }
+    .db-sidebar a:hover { background: var(--admin-surface); }
+    .db-sidebar a.active { background: var(--admin-accent); color: #fff; }
+    .db-main { flex: 1; overflow-x: auto; }
+    .db-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .db-table th, .db-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--admin-border); }
+    .db-table th { background: var(--admin-surface); color: var(--admin-muted); font-weight: 500; }
+    .db-table tr:hover { background: rgba(255,255,255,0.03); }
+    .db-cell-id { color: var(--admin-accent); }
+</style>
+
+<h2>База данных</h2>
+<div class="db-layout">
+    <nav class="db-sidebar card">
+        <h3 style="margin:0 0 12px;">Таблицы</h3>
+        {% for tname, tlabel, _ in tables %}
+        <a href="/admin/db?table={{ tname }}" class="{% if selected_table == tname %}active{% endif %}">{{ tlabel }}</a>
+        {% endfor %}
+    </nav>
+    <div class="db-main card">
+        {% if selected_table and rows %}
+        <h3>{{ selected_table }}</h3>
+        <table class="db-table">
+            <thead>
+                <tr>
+                    {% for k in rows[0].__table__.columns.keys() %}
+                    <th>{{ k }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    {% for k in row.__table__.columns.keys() %}
+                    <td class="{% if k == 'id' %}db-cell-id{% endif %}">{{ row|attr(k) }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% elif selected_table %}
+        <p style="color:var(--admin-muted);">Нет записей</p>
+        {% else %}
+        <p style="color:var(--admin-muted);">Выберите таблицу слева</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

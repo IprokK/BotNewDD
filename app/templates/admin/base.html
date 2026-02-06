@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Admin{% endblock %} — Quest Platform</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/sortablejs@1.15.0/Sortable.min.js"></script>
+    <style>
+        :root {
+            --admin-bg: #0d1117;
+            --admin-sidebar: #161b22;
+            --admin-surface: #21262d;
+            --admin-border: #30363d;
+            --admin-text: #e6edf3;
+            --admin-muted: #8b949e;
+            --admin-accent: #58a6ff;
+            --admin-success: #3fb950;
+            --admin-warning: #d29922;
+        }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; height: 100%; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--admin-bg); color: var(--admin-text); }
+        .admin-layout { display: flex; min-height: 100vh; width: 100%; }
+        .admin-sidebar { width: 240px; background: var(--admin-sidebar); border-right: 1px solid var(--admin-border); padding: 20px 0; flex-shrink: 0; }
+        .admin-sidebar h1 { font-size: 1.1rem; margin: 0 16px 24px; color: var(--admin-muted); }
+        .admin-sidebar a { display: block; padding: 10px 20px; color: var(--admin-text); text-decoration: none; transition: background .15s; }
+        .admin-sidebar a:hover { background: var(--admin-surface); }
+        .admin-sidebar a.active { background: var(--admin-surface); color: var(--admin-accent); border-left: 3px solid var(--admin-accent); margin-left: -3px; padding-left: 23px; }
+        .admin-main { flex: 1; overflow: auto; padding: 24px; }
+        .admin-main h2 { margin: 0 0 20px; font-size: 1.5rem; }
+        .card { background: var(--admin-surface); border: 1px solid var(--admin-border); border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+        .card h3 { margin: 0 0 12px; font-size: 1rem; color: var(--admin-muted); }
+        button, .btn { background: var(--admin-accent); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+        button:hover, .btn:hover { opacity: 0.9; }
+        .btn-ghost { background: transparent; border: 1px solid var(--admin-border); color: var(--admin-text); }
+        input, select, textarea { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--admin-border); background: var(--admin-bg); color: var(--admin-text); }
+        .sortable-ghost { opacity: 0.5; background: var(--admin-accent); }
+        .sortable-drag { cursor: grabbing; }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="admin-layout">
+        <nav class="admin-sidebar">
+            <h1>Админ-панель</h1>
+            <a href="/admin" class="{% if request.url.path == '/admin' %}active{% endif %}">📋 Live Ops</a>
+            <a href="/admin/registrations" class="{% if 'registrations' in request.url.path %}active{% endif %}">✍️ Заявки</a>
+            <a href="/admin/dialogues" class="{% if request.url.path.startswith('/admin/dialogues') %}active{% endif %}">💬 Диалоги</a>
+            <a href="/admin/content" class="{% if 'content' in request.url.path %}active{% endif %}">📄 Контент</a>
+            <a href="/admin/analytics" class="{% if 'analytics' in request.url.path %}active{% endif %}">📊 Аналитика</a>
+            <a href="/admin/log" class="{% if 'log' in request.url.path %}active{% endif %}">📜 Лог</a>
+            <a href="/admin/db" class="{% if 'db' in request.url.path %}active{% endif %}">🗄️ База данных</a>
+        </nav>
+        <main class="admin-main">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

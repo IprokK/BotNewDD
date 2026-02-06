@@ -1,0 +1,32 @@
+{% extends "admin/base.html" %}
+{% block title %}Заявки{% endblock %}
+{% block content %}
+<h2>Заявки на участие</h2>
+<p>Игроки, зарегистрировавшиеся через бота. Добавьте их в команды вручную.</p>
+
+<div class="card">
+    <h3>Ожидают назначения</h3>
+    {% for p in pending %}
+    <div class="team-card" style="display: flex; align-items: center; gap: 16px;">
+        <span><strong>tg_id: {{ p.tg_id }}</strong></span>
+        <form hx-post="/admin/teams/assign" hx-target="body" hx-swap="none" style="display: flex; gap: 8px; align-items: center;">
+            <input type="hidden" name="tg_id" value="{{ p.tg_id }}">
+            <select name="team_id" required>
+                <option value="">— Выберите команду —</option>
+                {% for t in teams %}
+                <option value="{{ t.id }}">{{ t.name }}</option>
+                {% endfor %}
+            </select>
+            <select name="role">
+                <option value="ROLE_A">Роль A</option>
+                <option value="ROLE_B">Роль B</option>
+            </select>
+            <button type="submit">Добавить</button>
+        </form>
+    </div>
+    {% else %}
+    <p class="muted">Нет заявок</p>
+    {% endfor %}
+</div>
+
+{% endblock %}
