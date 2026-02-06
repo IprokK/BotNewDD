@@ -188,7 +188,7 @@ async def step_participation(message: Message, state: FSMContext):
         await state.set_state(RegStates.partner_name)
         await message.answer(
             "_5/12_\n"
-            "ФИО или ник напарника:",
+            "ФИО или ник напарника (напарнику тоже нужно зарегистрироваться):",
             reply_markup=ReplyKeyboardRemove(),
             parse_mode="Markdown",
         )
@@ -211,7 +211,7 @@ async def _go_isu_or_skip(message: Message, state: FSMContext):
         await state.set_state(RegStates.isu_number)
         await message.answer(
             "_6/12_\n"
-            "ISU номер (необязательно):",
+            "Ваш ISU номер (обязательно, если из ИТМО):",
             reply_markup=skip_kb(),
             parse_mode="Markdown",
         )
