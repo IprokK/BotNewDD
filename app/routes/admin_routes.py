@@ -315,6 +315,8 @@ async def admin_registration_cancel(
     """Отменить анкету — участник сможет заполнить её заново."""
     from fastapi.responses import RedirectResponse
 
+    from app.notify import notify_registration_cancelled
+
     r = await db.execute(
         select(RegistrationForm).where(
             RegistrationForm.id == form_id,
@@ -323,8 +325,10 @@ async def admin_registration_cancel(
     )
     form = r.scalar_one_or_none()
     if form:
+        tg_id = form.tg_id
         await db.delete(form)
         await db.commit()
+        await notify_registration_cancelled(tg_id)
     return RedirectResponse(url="/admin/registrations", status_code=303)
 
 

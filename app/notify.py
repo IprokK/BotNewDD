@@ -47,6 +47,12 @@ async def notify_visit_finished(tg_id: int, station_name: str, points: int) -> b
     return await send_telegram(tg_id, text)
 
 
+async def notify_registration_cancelled(tg_id: int) -> bool:
+    """Уведомить участника, что анкету отменили и можно заполнить заново."""
+    text = "📋 Твою анкету отменили. Ты можешь заполнить её снова — нажми «✍️ Регистрация» в меню бота."
+    return await send_telegram(tg_id, text)
+
+
 async def notify_dialogue_message(tg_id: int, thread_title: str, character: str, text: str, webapp_url: str) -> bool:
     """Уведомить участника о новом сообщении в диалоге (по расписанию)."""
     sender = f"*{_esc(character)}:* " if character else ""
