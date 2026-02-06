@@ -251,10 +251,10 @@ async def admin_registrations(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_admin),
 ):
-    """Заявки на участие (игроки без команды) с данными анкеты."""
+    """Заявки на участие (игроки без команды, с заполненной анкетой)."""
     r = await db.execute(
         select(Player, RegistrationForm)
-        .outerjoin(
+        .join(
             RegistrationForm,
             (RegistrationForm.event_id == Player.event_id) & (RegistrationForm.tg_id == Player.tg_id),
         )
