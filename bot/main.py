@@ -58,14 +58,14 @@ QUEST_INFO = """🎬 «94 оттенка любви» — это интерак�
 def quest_info_text(event: Event) -> str:
     cfg = event.config or {}
     date = cfg.get("date", "")
-    duration = cfg.get("duration", "~6 часов")
+    duration = cfg.get("duration", "с 13:00 до 19:00")
     lines = [QUEST_INFO]
     if date or duration:
         lines.append("")
         if date:
             lines.append(f"📅 Дата: {date}")
         if duration:
-            lines.append(f"⏱ Длительность: {duration}")
+            lines.append(f"⏱ Продолжительность: {duration}")
     return "\n".join(lines)
 
 
