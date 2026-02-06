@@ -211,7 +211,7 @@ async def _go_isu_or_skip(message: Message, state: FSMContext):
         await state.set_state(RegStates.isu_number)
         await message.answer(
             "_6/12_\n"
-            "Ваш ISU номер (обязательно, если из ИТМО):",
+            "Твой ISU номер (обязательно, если из ИТМО):",
             reply_markup=skip_kb(),
             parse_mode="Markdown",
         )
