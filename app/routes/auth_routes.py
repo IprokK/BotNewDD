@@ -93,12 +93,18 @@ async def verify(
 
     token = create_jwt(tg_id, req.event_id, role, extra)
 
-    # JSON/API: return token + redirect, set cookie
+    # Редирект по роли: PLAYER → /player, ADMIN → /admin, STATION_HOST → /station
+    redirect_url = "/player"
+    if role in ("ADMIN", "SUPERADMIN"):
+        redirect_url = "/admin"
+    elif role == "STATION_HOST":
+        redirect_url = "/station"
+
     if request.headers.get("Accept", "").startswith("application/json") or "application/json" in request.headers.get("Content-Type", ""):
-        resp = JSONResponse({"token": token, "redirect": "/player"})
+        resp = JSONResponse({"token": token, "redirect": redirect_url})
         resp.set_cookie("session", token, httponly=True, samesite="lax", max_age=86400)
         return resp
-    response = RedirectResponse(url="/player", status_code=303)
+    response = RedirectResponse(url=redirect_url, status_code=303)
     response.set_cookie("session", token, httponly=True, samesite="lax", max_age=86400)
     return response
 
