@@ -23,8 +23,14 @@
     </table>
 </div>
 
-{% if player and not player.team_id %}
-<p style="margin-top: 16px;"><a href="/admin/registrations">Добавить в команду →</a></p>
-{% endif %}
+<p style="margin-top: 16px;">
+    {% if player and not player.team_id %}
+    <a href="/admin/registrations">Добавить в команду →</a>
+    <span style="margin: 0 12px;">|</span>
+    {% endif %}
+    <form method="post" action="/admin/registrations/{{ form.id }}/cancel" style="display: inline;" onsubmit="return confirm('Отменить анкету? Участник сможет заполнить её заново в боте.');">
+        <button type="submit" class="btn" style="background: #8b2635; color: #fff;">Отменить анкету</button>
+    </form>
+</p>
 
 {% endblock %}

@@ -10,7 +10,12 @@
     <div class="team-card" style="margin-bottom: 24px; padding: 16px; border: 1px solid #333; border-radius: 8px;">
         <div style="margin-bottom: 12px;">
             <strong>{{ form.full_name if form else 'Без анкеты' }}</strong> (tg_id: {{ player.tg_id }})
-            {% if form %}<a href="/admin/registrations/{{ form.id }}" style="margin-left: 12px;">Подробнее</a>{% endif %}
+            {% if form %}
+            <a href="/admin/registrations/{{ form.id }}" style="margin-left: 12px;">Подробнее</a>
+            <form method="post" action="/admin/registrations/{{ form.id }}/cancel" style="display: inline; margin-left: 8px;" onsubmit="return confirm('Отменить анкету? Участник сможет заполнить её заново.');">
+                <button type="submit" style="background: #8b2635; color: #fff; padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer;">Отменить</button>
+            </form>
+            {% endif %}
         </div>
         <form hx-post="/admin/teams/assign" hx-target="body" hx-swap="none" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
             <input type="hidden" name="tg_id" value="{{ player.tg_id }}">
@@ -36,9 +41,12 @@
 <p class="muted">Полный список зарегистрировавшихся (можно открыть любую анкету)</p>
 <div class="card">
     {% for f in all_forms %}
-    <div style="padding: 8px 0; border-bottom: 1px solid #333;">
+    <div style="padding: 8px 0; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 12px;">
         <a href="/admin/registrations/{{ f.id }}">{{ f.full_name }}</a>
         <span class="muted"> — {{ f.university }}{% if f.university_other %} ({{ f.university_other }}){% endif %}, {{ f.created_at.strftime('%d.%m.%Y') if f.created_at else '' }}</span>
+        <form method="post" action="/admin/registrations/{{ f.id }}/cancel" style="display: inline; margin-left: auto;" onsubmit="return confirm('Отменить анкету? Участник сможет заполнить её заново.');">
+            <button type="submit" style="background: #8b2635; color: #fff; padding: 2px 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em;">Отменить</button>
+        </form>
     </div>
     {% else %}
     <p class="muted">Пока нет анкет</p>

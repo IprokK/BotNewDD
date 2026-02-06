@@ -306,6 +306,28 @@ async def admin_registration_detail(
     )
 
 
+@router.post("/registrations/{form_id}/cancel")
+async def admin_registration_cancel(
+    form_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    """Отменить анкету — участник сможет заполнить её заново."""
+    from fastapi.responses import RedirectResponse
+
+    r = await db.execute(
+        select(RegistrationForm).where(
+            RegistrationForm.id == form_id,
+            RegistrationForm.event_id == user.event_id,
+        )
+    )
+    form = r.scalar_one_or_none()
+    if form:
+        await db.delete(form)
+        await db.commit()
+    return RedirectResponse(url="/admin/registrations", status_code=303)
+
+
 @router.post("/content")
 async def admin_create_content(
     key: str = Form(...),
