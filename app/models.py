@@ -70,6 +70,7 @@ class Event(Base):
     content_blocks = relationship("ContentBlock", back_populates="event")
     dialogue_threads = relationship("DialogueThread", back_populates="event")
     event_logs = relationship("EventLog", back_populates="event")
+    registration_forms = relationship("RegistrationForm", back_populates="event")
 
 
 class Team(Base):
@@ -281,6 +282,34 @@ class EventLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     event = relationship("Event", back_populates="event_logs")
+
+
+class RegistrationForm(Base):
+    """Анкета регистрации участника квеста (заполняется в боте)."""
+    __tablename__ = "registration_forms"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), nullable=False)
+    tg_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    university: Mapped[str] = mapped_column(String(100), nullable=False)  # ИТМО, СПбГУ, Политех, Другое
+    university_other: Mapped[str | None] = mapped_column(String(255), nullable=True)  # если Другое
+    course_status: Mapped[str] = mapped_column(String(50), nullable=False)
+    participation_format: Mapped[str] = mapped_column(String(50), nullable=False)  # Один / Есть пара
+    partner_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    isu_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    interests: Mapped[str | None] = mapped_column(Text, nullable=True)
+    music_preferences: Mapped[str | None] = mapped_column(Text, nullable=True)
+    films_games: Mapped[str | None] = mapped_column(Text, nullable=True)
+    character_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    photo_file_id: Mapped[str | None] = mapped_column(String(255), nullable=True)  # Telegram file_id
+    privacy_consent: Mapped[bool] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("event_id", "tg_id", name="uq_registration_forms_event_tg"),)
+
+    event = relationship("Event", back_populates="registration_forms")
 
 
 class EventUser(Base):

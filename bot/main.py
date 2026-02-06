@@ -13,12 +13,15 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
     KeyboardButton,
 )
+from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import settings
 from app.database import async_session_maker
-from app.models import Event, Player
+from app.models import Event, Player, RegistrationForm
 from sqlalchemy import select
+
+from bot.registration import router as registration_router, start_registration
 
 if not settings.telegram_bot_token:
     print("Set TELEGRAM_BOT_TOKEN to run the bot")
@@ -27,6 +30,7 @@ if not settings.telegram_bot_token:
 bot = Bot(token=settings.telegram_bot_token)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
+dp.include_router(registration_router)
 
 CURRENT_EVENT_ID = 1  # TODO: из конфига или БД
 
@@ -101,7 +105,7 @@ async def quest_info(message: Message):
 
 
 @dp.message(F.text == "✍️ Регистрация")
-async def register(message: Message):
+async def register(message: Message, state: FSMContext):
     tg_id = message.from_user.id
     async with async_session_maker() as db:
         r = await db.execute(
@@ -111,34 +115,39 @@ async def register(message: Message):
             )
         )
         existing = r.scalar_one_or_none()
+        if existing and existing.team_id:
+            await message.answer(
+                "✅ Ты уже зарегистрирован и в команде!\n"
+                "Организаторы назначат станции и отправят уведомления."
+            )
+            return
         if existing:
-            if existing.team_id:
-                await message.answer(
-                    "✅ Ты уже зарегистрирован и в команде!\n"
-                    "Организаторы назначат станции и отправят уведомления."
+            # Есть Player, но нет команды — уже подал заявку (заполнил анкету)
+            r = await db.execute(
+                select(RegistrationForm).where(
+                    RegistrationForm.event_id == CURRENT_EVENT_ID,
+                    RegistrationForm.tg_id == tg_id,
                 )
-            else:
+            )
+            if r.scalar_one_or_none():
                 await message.answer(
                     "✅ Ты уже подал заявку!\n"
                     "Ожидай, пока организаторы добавят тебя в команду. "
                     "Уведомление придёт сюда."
                 )
-            return
-        player = Player(event_id=CURRENT_EVENT_ID, tg_id=tg_id)
-        db.add(player)
-        await db.commit()
-    await message.answer(
-        "✅ *Регистрация прошла успешно!*\n\n"
-        "Организаторы скоро распределят участников по командам. "
-        "Когда тебя добавят в команду, сюда придёт уведомление, "
-        "и в меню появится кнопка «Открыть игру».",
-        parse_mode="Markdown",
-    )
+                return
+    await start_registration(message, state)
 
 
 @dp.message(Command("quest"))
 async def cmd_quest(message: Message):
     await quest_info(message)
+
+
+@dp.message(Command("register", "reg", "registration"))
+async def cmd_register(message: Message, state: FSMContext):
+    """Команда /register — запуск анкеты регистрации."""
+    await register(message, state)  # reuse same logic as button
 
 
 async def main():

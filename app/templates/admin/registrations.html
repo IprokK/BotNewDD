@@ -2,15 +2,32 @@
 {% block title %}Заявки{% endblock %}
 {% block content %}
 <h2>Заявки на участие</h2>
-<p>Игроки, зарегистрировавшиеся через бота. Добавьте их в команды вручную.</p>
+<p>Игроки, зарегистрировавшиеся через бота (анкета). Добавьте их в команды вручную.</p>
 
 <div class="card">
     <h3>Ожидают назначения</h3>
-    {% for p in pending %}
-    <div class="team-card" style="display: flex; align-items: center; gap: 16px;">
-        <span><strong>tg_id: {{ p.tg_id }}</strong></span>
-        <form hx-post="/admin/teams/assign" hx-target="body" hx-swap="none" style="display: flex; gap: 8px; align-items: center;">
-            <input type="hidden" name="tg_id" value="{{ p.tg_id }}">
+    {% for player, form in pending_with_forms %}
+    <div class="team-card" style="margin-bottom: 24px; padding: 16px; border: 1px solid #333; border-radius: 8px;">
+        <details style="margin-bottom: 12px;">
+            <summary style="cursor: pointer; font-weight: bold;">
+                {{ form.full_name if form else 'Без анкеты' }} (tg_id: {{ player.tg_id }})
+            </summary>
+            {% if form %}
+            <table style="margin-top: 8px; font-size: 0.9em;">
+                <tr><td>Учебное заведение:</td><td>{{ form.university }}{{ ' — ' + form.university_other if form.university_other else '' }}</td></tr>
+                <tr><td>Курс:</td><td>{{ form.course_status }}</td></tr>
+                <tr><td>Формат:</td><td>{{ form.participation_format }}{{ ' — ' + form.partner_name if form.partner_name else '' }}</td></tr>
+                {% if form.isu_number %}<tr><td>ISU:</td><td>{{ form.isu_number }}</td></tr>{% endif %}
+                {% if form.interests %}<tr><td>Интересы:</td><td>{{ form.interests }}</td></tr>{% endif %}
+                {% if form.music_preferences %}<tr><td>Музыка:</td><td>{{ form.music_preferences }}</td></tr>{% endif %}
+                {% if form.films_games %}<tr><td>Фильмы/игры:</td><td>{{ form.films_games }}</td></tr>{% endif %}
+                {% if form.character_type %}<tr><td>Характер:</td><td>{{ form.character_type }}</td></tr>{% endif %}
+                {% if form.comment %}<tr><td>Комментарий:</td><td>{{ form.comment }}</td></tr>{% endif %}
+            </table>
+            {% endif %}
+        </details>
+        <form hx-post="/admin/teams/assign" hx-target="body" hx-swap="none" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <input type="hidden" name="tg_id" value="{{ player.tg_id }}">
             <select name="team_id" required>
                 <option value="">— Выберите команду —</option>
                 {% for t in teams %}

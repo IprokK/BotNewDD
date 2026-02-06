@@ -22,6 +22,7 @@ from app.models import (
     EventUser,
     Player,
     Rating,
+    RegistrationForm,
     Station,
     StationHost,
     StationVisit,
@@ -250,19 +251,24 @@ async def admin_registrations(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_admin),
 ):
-    """Заявки на участие (игроки без команды)."""
+    """Заявки на участие (игроки без команды) с данными анкеты."""
     r = await db.execute(
-        select(Player).where(
+        select(Player, RegistrationForm)
+        .outerjoin(
+            RegistrationForm,
+            (RegistrationForm.event_id == Player.event_id) & (RegistrationForm.tg_id == Player.tg_id),
+        )
+        .where(
             Player.event_id == user.event_id,
             Player.team_id.is_(None),
         )
     )
-    pending = r.scalars().all()
+    pending_with_forms = r.all()  # [(Player, RegistrationForm|None), ...]
     r = await db.execute(select(Team).where(Team.event_id == user.event_id))
     teams = r.scalars().all()
     return templates.TemplateResponse(
         "admin/registrations.html",
-        {"request": request, "user": user, "pending": pending, "teams": teams},
+        {"request": request, "user": user, "pending_with_forms": pending_with_forms, "teams": teams},
     )
 
 
