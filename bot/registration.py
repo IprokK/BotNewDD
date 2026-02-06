@@ -48,21 +48,21 @@ def skip_kb() -> ReplyKeyboardMarkup:
 
 
 def universities_kb() -> ReplyKeyboardMarkup:
-    row1 = [KeyboardButton(t) for t in UNIVERSITIES[:3]]
-    row2 = [KeyboardButton(UNIVERSITIES[3])]
+    row1 = [KeyboardButton(text=t) for t in UNIVERSITIES[:3]]
+    row2 = [KeyboardButton(text=UNIVERSITIES[3])]
     return ReplyKeyboardMarkup(keyboard=[row1, row2], resize_keyboard=True)
 
 
 def course_kb() -> ReplyKeyboardMarkup:
     rows = []
     for i in range(0, len(COURSE_OPTIONS), 3):
-        rows.append([KeyboardButton(t) for t in COURSE_OPTIONS[i:i+3]])
+        rows.append([KeyboardButton(text=t) for t in COURSE_OPTIONS[i:i+3]])
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
 def participation_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(t) for t in PARTICIPATION_FORMAT]],
+        keyboard=[[KeyboardButton(text=t) for t in PARTICIPATION_FORMAT]],
         resize_keyboard=True,
     )
 
@@ -80,10 +80,10 @@ def consent_kb() -> ReplyKeyboardMarkup:
 def character_kb() -> ReplyKeyboardMarkup:
     rows = []
     for i in range(0, len(CHARACTER_TYPES) - 1, 2):  # -1 to exclude "Другое" for pairing
-        rows.append([KeyboardButton(CHARACTER_TYPES[i]), KeyboardButton(CHARACTER_TYPES[i+1])])
+        rows.append([KeyboardButton(text=CHARACTER_TYPES[i]), KeyboardButton(text=CHARACTER_TYPES[i+1])])
     if len(CHARACTER_TYPES) % 2 == 1:
-        rows.append([KeyboardButton(CHARACTER_TYPES[-1])])
-    rows.append([KeyboardButton(BTN_SKIP)])
+        rows.append([KeyboardButton(text=CHARACTER_TYPES[-1])])
+    rows.append([KeyboardButton(text=BTN_SKIP)])
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
