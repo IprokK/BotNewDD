@@ -402,6 +402,8 @@ async def step_consent(message: Message, state: FSMContext):
 
     await message.answer(
         "✅ Спасибо! Ты зарегистрирован(а).\n\n"
+        "Важно: зарегистрируйся ещё в системе ITMO Events:\n"
+        "https://itmo.events/events/117006\n\n"
         "Скоро появится информация о старте квеста.",
         reply_markup=main_kb(),
     )
