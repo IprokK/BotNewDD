@@ -8,24 +8,10 @@
     <h3>Ожидают назначения</h3>
     {% for player, form in pending_with_forms %}
     <div class="team-card" style="margin-bottom: 24px; padding: 16px; border: 1px solid #333; border-radius: 8px;">
-        <details style="margin-bottom: 12px;">
-            <summary style="cursor: pointer; font-weight: bold;">
-                {{ form.full_name if form else 'Без анкеты' }} (tg_id: {{ player.tg_id }})
-            </summary>
-            {% if form %}
-            <table style="margin-top: 8px; font-size: 0.9em;">
-                <tr><td>Учебное заведение:</td><td>{{ form.university }}{{ ' — ' + form.university_other if form.university_other else '' }}</td></tr>
-                <tr><td>Курс:</td><td>{{ form.course_status }}</td></tr>
-                <tr><td>Формат:</td><td>{{ form.participation_format }}{{ ' — ' + form.partner_name if form.partner_name else '' }}</td></tr>
-                {% if form.isu_number %}<tr><td>ISU:</td><td>{{ form.isu_number }}</td></tr>{% endif %}
-                {% if form.interests %}<tr><td>Интересы:</td><td>{{ form.interests }}</td></tr>{% endif %}
-                {% if form.music_preferences %}<tr><td>Музыка:</td><td>{{ form.music_preferences }}</td></tr>{% endif %}
-                {% if form.films_games %}<tr><td>Фильмы/игры:</td><td>{{ form.films_games }}</td></tr>{% endif %}
-                {% if form.character_type %}<tr><td>Характер:</td><td>{{ form.character_type }}</td></tr>{% endif %}
-                {% if form.comment %}<tr><td>Комментарий:</td><td>{{ form.comment }}</td></tr>{% endif %}
-            </table>
-            {% endif %}
-        </details>
+        <div style="margin-bottom: 12px;">
+            <strong>{{ form.full_name if form else 'Без анкеты' }}</strong> (tg_id: {{ player.tg_id }})
+            {% if form %}<a href="/admin/registrations/{{ form.id }}" style="margin-left: 12px;">Подробнее</a>{% endif %}
+        </div>
         <form hx-post="/admin/teams/assign" hx-target="body" hx-swap="none" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
             <input type="hidden" name="tg_id" value="{{ player.tg_id }}">
             <select name="team_id" required>
@@ -43,6 +29,19 @@
     </div>
     {% else %}
     <p class="muted">Нет заявок</p>
+    {% endfor %}
+</div>
+
+<h3 style="margin-top: 32px;">Все анкеты</h3>
+<p class="muted">Полный список зарегистрировавшихся (можно открыть любую анкету)</p>
+<div class="card">
+    {% for f in all_forms %}
+    <div style="padding: 8px 0; border-bottom: 1px solid #333;">
+        <a href="/admin/registrations/{{ f.id }}">{{ f.full_name }}</a>
+        <span class="muted"> — {{ f.university }}{% if f.university_other %} ({{ f.university_other }}){% endif %}, {{ f.created_at.strftime('%d.%m.%Y') if f.created_at else '' }}</span>
+    </div>
+    {% else %}
+    <p class="muted">Пока нет анкет</p>
     {% endfor %}
 </div>
 

@@ -1,0 +1,30 @@
+{% extends "admin/base.html" %}
+{% block title %}Анкета: {{ form.full_name }}{% endblock %}
+{% block content %}
+<h2>Анкета участника</h2>
+<p><a href="/admin/registrations">← Назад к заявкам</a></p>
+
+<div class="card" style="max-width: 640px;">
+    <table style="width: 100%; border-collapse: collapse;">
+        <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold; width: 180px;">ФИО</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ form.full_name }}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Telegram ID</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ form.tg_id }}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Учебное заведение</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ form.university }}{% if form.university_other %} — {{ form.university_other }}{% endif %}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Курс / статус</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ form.course_status }}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Формат участия</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ form.participation_format }}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">ФИО / ник напарника</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ form.partner_name or '—' }}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">ISU номер</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ form.isu_number or '—' }}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Интересы / хобби</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ form.interests or '—' }}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Музыкальные предпочтения</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ form.music_preferences or '—' }}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Фильмы / сериалы / игры</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ form.films_games or '—' }}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Комментарий / пожелания</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ form.comment or '—' }}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Фото</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ 'Загружено' if form.photo_file_id else '—' }}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Согласие на обработку данных</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ 'Да' if form.privacy_consent else 'Нет' }}</td></tr>
+        <tr><td style="padding: 8px; font-weight: bold;">Дата подачи</td><td style="padding: 8px;">{{ form.created_at.strftime('%d.%m.%Y %H:%M') if form.created_at else '—' }}</td></tr>
+    </table>
+</div>
+
+{% if player and not player.team_id %}
+<p style="margin-top: 16px;"><a href="/admin/registrations">Добавить в команду →</a></p>
+{% endif %}
+
+{% endblock %}

@@ -5,8 +5,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.filters import StateFilter
 
 from app.database import async_session_maker
-from app.models import Event, Player, RegistrationForm
+from app.models import Player, RegistrationForm
 from sqlalchemy import select
+
+from bot.keyboards import main_kb
 
 router = Router(name="registration")
 
@@ -34,10 +36,6 @@ BTN_OTHER = "Другое"
 UNIVERSITIES = ["ИТМО", "СПбГУ", "Политех", BTN_OTHER]
 COURSE_OPTIONS = ["1 курс", "2 курс", "3 курс", "4 курс", "5 курс", "6 курс", "Магистр", "Аспирант", "Выпускник", BTN_OTHER]
 PARTICIPATION_FORMAT = ["Один", "Есть пара или команда"]
-CHARACTER_TYPES = [
-    "Лид / организатор", "Тихоня / наблюдатель", "Юмор / душа компании",
-    "Аналитик / стратег", "Творческий", BTN_OTHER
-]
 
 
 def skip_kb() -> ReplyKeyboardMarkup:
@@ -77,16 +75,6 @@ def consent_kb() -> ReplyKeyboardMarkup:
     )
 
 
-def character_kb() -> ReplyKeyboardMarkup:
-    rows = []
-    for i in range(0, len(CHARACTER_TYPES) - 1, 2):  # -1 to exclude "Другое" for pairing
-        rows.append([KeyboardButton(text=CHARACTER_TYPES[i]), KeyboardButton(text=CHARACTER_TYPES[i+1])])
-    if len(CHARACTER_TYPES) % 2 == 1:
-        rows.append([KeyboardButton(text=CHARACTER_TYPES[-1])])
-    rows.append([KeyboardButton(text=BTN_SKIP)])
-    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
-
-
 # --- FSM States ---
 from aiogram.fsm.state import State, StatesGroup
 
@@ -102,8 +90,6 @@ class RegStates(StatesGroup):
     interests = State()
     music = State()
     films_games = State()
-    character = State()
-    character_other = State()
     comment = State()
     photo = State()
     consent = State()
@@ -121,7 +107,7 @@ async def start_registration(message: Message, state: FSMContext):
     await message.answer(
         "📋 *Анкета регистрации*\n\n"
         "Пройди анкету по шагам. Для необязательных вопросов можно нажать «Пропустить».\n\n"
-        "_1/13_\n"
+        "_1/12_\n"
         "ФИО участника:",
         parse_mode="Markdown",
     )
@@ -135,7 +121,7 @@ async def step_full_name(message: Message, state: FSMContext):
     await state.update_data(full_name=message.text.strip())
     await state.set_state(RegStates.university)
     await message.answer(
-        "_2/13_\n"
+        "_2/12_\n"
         "Где учишься?",
         reply_markup=universities_kb(),
         parse_mode="Markdown",
@@ -162,7 +148,7 @@ async def step_university(message: Message, state: FSMContext):
 async def _go_course(message: Message, state: FSMContext):
     await state.set_state(RegStates.course)
     await message.answer(
-        "_3/13_\n"
+        "_3/12_\n"
         "Курс / статус:",
         reply_markup=course_kb(),
         parse_mode="Markdown",
@@ -184,7 +170,7 @@ async def step_course(message: Message, state: FSMContext):
     await state.update_data(course_status=text)
     await state.set_state(RegStates.participation_format)
     await message.answer(
-        "_4/13_\n"
+        "_4/12_\n"
         "Формат участия:",
         reply_markup=participation_kb(),
         parse_mode="Markdown",
@@ -201,7 +187,7 @@ async def step_participation(message: Message, state: FSMContext):
     if text == "Есть пара или команда":
         await state.set_state(RegStates.partner_name)
         await message.answer(
-            "_5/13_\n"
+            "_5/12_\n"
             "ФИО или ник напарника:",
             reply_markup=ReplyKeyboardRemove(),
             parse_mode="Markdown",
@@ -224,7 +210,7 @@ async def _go_isu_or_skip(message: Message, state: FSMContext):
     if data.get("university") == "ИТМО":
         await state.set_state(RegStates.isu_number)
         await message.answer(
-            "_6/13_\n"
+            "_6/12_\n"
             "ISU номер (необязательно):",
             reply_markup=skip_kb(),
             parse_mode="Markdown",
@@ -247,7 +233,7 @@ async def step_isu(message: Message, state: FSMContext):
 async def _go_interests(message: Message, state: FSMContext):
     await state.set_state(RegStates.interests)
     await message.answer(
-        "_7/13_\n"
+        "_7/12_\n"
         "Интересы / хобби (необязательно):",
         reply_markup=skip_kb(),
         parse_mode="Markdown",
@@ -262,7 +248,7 @@ async def step_interests(message: Message, state: FSMContext):
         await state.update_data(interests=None)
     await state.set_state(RegStates.music)
     await message.answer(
-        "_8/13_\n"
+        "_8/12_\n"
         "Музыкальные предпочтения (необязательно):",
         reply_markup=skip_kb(),
         parse_mode="Markdown",
@@ -277,7 +263,7 @@ async def step_music(message: Message, state: FSMContext):
         await state.update_data(music_preferences=None)
     await state.set_state(RegStates.films_games)
     await message.answer(
-        "_9/13_\n"
+        "_9/12_\n"
         "Любимые фильмы / сериалы / игры (необязательно):",
         reply_markup=skip_kb(),
         parse_mode="Markdown",
@@ -290,46 +276,13 @@ async def step_films(message: Message, state: FSMContext):
         await state.update_data(films_games=message.text.strip())
     else:
         await state.update_data(films_games=None)
-    await state.set_state(RegStates.character)
-    await message.answer(
-        "_10/13_\n"
-        "Тип характера / стиль поведения (необязательно):",
-        reply_markup=character_kb(),
-        parse_mode="Markdown",
-    )
-
-
-@router.message(StateFilter(RegStates.character), F.text)
-async def step_character(message: Message, state: FSMContext):
-    text = message.text.strip() if message.text else ""
-    if text == BTN_SKIP:
-        await state.update_data(character_type=None)
-        await _go_comment(message, state)
-        return
-    if text == BTN_OTHER:
-        await state.set_state(RegStates.character_other)
-        await message.answer(
-            "Опиши свой тип характера:",
-            reply_markup=ReplyKeyboardRemove(),
-        )
-        return
-    if text in CHARACTER_TYPES:
-        await state.update_data(character_type=text)
-        await _go_comment(message, state)
-    else:
-        await message.answer("Выбери вариант кнопкой или «Пропустить».")
-
-
-@router.message(StateFilter(RegStates.character_other), F.text)
-async def step_character_other(message: Message, state: FSMContext):
-    await state.update_data(character_type=message.text.strip())
     await _go_comment(message, state)
 
 
 async def _go_comment(message: Message, state: FSMContext):
     await state.set_state(RegStates.comment)
     await message.answer(
-        "_11/13_\n"
+        "_10/12_\n"
         "Комментарий / пожелания (необязательно):",
         reply_markup=skip_kb(),
         parse_mode="Markdown",
@@ -344,7 +297,7 @@ async def step_comment(message: Message, state: FSMContext):
         await state.update_data(comment=None)
     await state.set_state(RegStates.photo)
     await message.answer(
-        "_12/13_\n"
+        "_11/12_\n"
         "Фото участника (необязательно)\n\n"
         "Отправь фото или нажми «Пропустить»:",
         reply_markup=skip_kb(),
@@ -371,7 +324,7 @@ async def step_photo_skip(message: Message, state: FSMContext):
 async def _go_consent(message: Message, state: FSMContext):
     await state.set_state(RegStates.consent)
     await message.answer(
-        "_13/13_\n\n" + PRIVACY_CONSENT_TEXT,
+        "_12/12_\n\n" + PRIVACY_CONSENT_TEXT,
         reply_markup=consent_kb(),
         parse_mode="Markdown",
     )
@@ -385,7 +338,7 @@ async def step_consent(message: Message, state: FSMContext):
         await message.answer(
             "❌ Без согласия на обработку персональных данных участие в квесте невозможно.\n\n"
             "Если передумаешь — нажми «Регистрация» снова.",
-            reply_markup=ReplyKeyboardRemove(),
+            reply_markup=main_kb(),
         )
         return
     if text != "Согласен":
@@ -421,7 +374,7 @@ async def step_consent(message: Message, state: FSMContext):
             "interests": data.get("interests"),
             "music_preferences": data.get("music_preferences"),
             "films_games": data.get("films_games"),
-            "character_type": data.get("character_type"),
+            "character_type": None,
             "comment": data.get("comment"),
             "photo_file_id": data.get("photo_file_id"),
             "privacy_consent": True,
@@ -450,5 +403,5 @@ async def step_consent(message: Message, state: FSMContext):
     await message.answer(
         "✅ Спасибо! Ты зарегистрирован(а).\n\n"
         "Скоро появится информация о старте квеста.",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=main_kb(),
     )

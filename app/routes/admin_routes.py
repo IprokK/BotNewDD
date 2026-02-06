@@ -263,12 +263,46 @@ async def admin_registrations(
             Player.team_id.is_(None),
         )
     )
-    pending_with_forms = r.all()  # [(Player, RegistrationForm|None), ...]
+    pending_with_forms = r.all()
+    r = await db.execute(
+        select(RegistrationForm).where(RegistrationForm.event_id == user.event_id).order_by(RegistrationForm.created_at.desc())
+    )
+    all_forms = r.scalars().all()
     r = await db.execute(select(Team).where(Team.event_id == user.event_id))
     teams = r.scalars().all()
     return templates.TemplateResponse(
         "admin/registrations.html",
-        {"request": request, "user": user, "pending_with_forms": pending_with_forms, "teams": teams},
+        {"request": request, "user": user, "pending_with_forms": pending_with_forms, "all_forms": all_forms, "teams": teams},
+    )
+
+
+@router.get("/registrations/{form_id}", response_class=HTMLResponse)
+async def admin_registration_detail(
+    request: Request,
+    form_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    """Полный просмотр анкеты зарегистрировавшегося."""
+    r = await db.execute(
+        select(RegistrationForm, Player)
+        .outerjoin(
+            Player,
+            (Player.event_id == RegistrationForm.event_id) & (Player.tg_id == RegistrationForm.tg_id),
+        )
+        .where(
+            RegistrationForm.id == form_id,
+            RegistrationForm.event_id == user.event_id,
+        )
+    )
+    row = r.first()
+    if not row:
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/admin/registrations", status_code=303)
+    form, player = row
+    return templates.TemplateResponse(
+        "admin/registration_detail.html",
+        {"request": request, "user": user, "form": form, "player": player},
     )
 
 
