@@ -1,0 +1,18 @@
+{% extends "admin/base.html" %}
+{% block title %}Чат: {{ team.name }}{% endblock %}
+{% block content %}
+<h2>Чат команды «{{ team.name }}»</h2>
+<p><a href="/admin/team-chats">← Назад к списку</a></p>
+
+<div class="card" style="max-width: 640px;">
+    {% for msg, sender in messages %}
+    <div style="padding: 12px 0; border-bottom: 1px solid var(--admin-border);">
+        <div style="font-weight: 600; margin-bottom: 4px;">{{ player_names.get(sender.id, '?') }} <span class="muted" style="font-weight: normal; font-size: 0.85rem;">{{ msg.created_at.strftime('%d.%m.%Y %H:%M') if msg.created_at else '' }}</span></div>
+        <div style="white-space: pre-wrap; word-break: break-word;">{{ msg.text }}</div>
+    </div>
+    {% else %}
+    <p class="muted">Пока нет сообщений</p>
+    {% endfor %}
+</div>
+
+{% endblock %}

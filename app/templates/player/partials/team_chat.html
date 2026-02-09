@@ -1,0 +1,17 @@
+<div id="team-chat-messages" style="max-height: 280px; overflow-y: auto; margin-bottom: 12px; padding: 8px; background: var(--bg, #1a1a1a); border-radius: 8px;">
+    {% for msg, sender in messages %}
+    <div style="margin-bottom: 12px; padding: 10px 12px; border-radius: 10px; {% if sender.id == current_player_id %}margin-left: 24px; background: var(--accent, #58a6ff); color: #fff;{% else %}margin-right: 24px; background: var(--surface, #2d2d2d);{% endif %}">
+        <div style="font-size: 0.75rem; opacity: 0.8; margin-bottom: 4px;">{{ player_names.get(sender.id, 'Участник') }}{% if sender.id == current_player_id %} (вы){% endif %}</div>
+        <div style="white-space: pre-wrap; word-break: break-word;">{{ msg.text }}</div>
+        <div style="font-size: 0.7rem; opacity: 0.6; margin-top: 4px;">{{ msg.created_at.strftime('%H:%M') if msg.created_at else '' }}</div>
+    </div>
+    {% else %}
+    <p style="color: var(--muted, #888); font-size: 0.9rem;">Пока нет сообщений. Напишите первым!</p>
+    {% endfor %}
+</div>
+<form hx-post="/player/team-chat" hx-target="#team-chat-container" hx-swap="innerHTML" hx-on::after-request="this.querySelector('input').value = ''">
+    <div style="display: flex; gap: 8px;">
+        <input type="text" name="text" placeholder="Сообщение напарнику..." maxlength="2000" style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--border, #333); background: var(--bg); color: inherit;" required>
+        <button type="submit" style="padding: 12px 20px; background: var(--accent); color: #fff; border: none; border-radius: 8px; cursor: pointer;">Отправить</button>
+    </div>
+</form>

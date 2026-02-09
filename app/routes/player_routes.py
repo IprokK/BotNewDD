@@ -18,9 +18,11 @@ from app.models import (
     DialogueThread,
     Player,
     Rating,
+    RegistrationForm,
     Station,
     StationVisit,
     Team,
+    TeamChatMessage,
 )
 from pydantic import BaseModel
 
@@ -92,6 +94,17 @@ async def player_dashboard(
     player = r.scalar_one_or_none()
     player_role = (player.role or "A").replace("ROLE_", "") if player else "—"
 
+    # Соседи по команде (напарники) — для ссылки «Написать в Telegram»
+    teammates = []
+    if user.team_id:
+        r = await db.execute(
+            select(Player).where(
+                Player.team_id == user.team_id,
+                Player.id != user.player_id,
+            )
+        )
+        teammates = list(r.scalars().all())
+
     return templates.TemplateResponse(
         "player/dashboard.html",
         {
@@ -103,6 +116,103 @@ async def player_dashboard(
             "threads": threads,
             "pending_ratings": pending_ratings,
             "player_role": player_role,
+            "teammates": teammates,
+        },
+    )
+
+
+@router.get("/player/team-chat", response_class=HTMLResponse)
+async def team_chat_messages(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_miniapp_access),
+):
+    """Сообщения чата команды (напарников) — для HTMX."""
+    if not user.team_id:
+        return HTMLResponse("<p style='color:var(--muted)'>Нет команды</p>")
+    r = await db.execute(
+        select(TeamChatMessage, Player)
+        .join(Player, TeamChatMessage.sender_player_id == Player.id)
+        .where(
+            TeamChatMessage.team_id == user.team_id,
+            TeamChatMessage.event_id == user.event_id,
+        )
+        .order_by(TeamChatMessage.created_at.asc())
+    )
+    messages = r.all()
+    # Имена отправителей из RegistrationForm
+    player_names = {}
+    for msg, p in messages:
+        if p.id not in player_names:
+            rf = await db.execute(
+                select(RegistrationForm.full_name).where(
+                    RegistrationForm.event_id == user.event_id,
+                    RegistrationForm.tg_id == p.tg_id,
+                )
+            )
+            row = rf.first()
+            player_names[p.id] = row[0] if row else f"Участник {p.id}"
+    return templates.TemplateResponse(
+        "player/partials/team_chat.html",
+        {
+            "request": request,
+            "messages": messages,
+            "player_names": player_names,
+            "current_player_id": user.player_id,
+        },
+    )
+
+
+@router.post("/player/team-chat", response_class=HTMLResponse)
+async def team_chat_send(
+    request: Request,
+    text: str = Form(""),
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_miniapp_access),
+):
+    """Отправить сообщение в чат команды."""
+    if not user.team_id:
+        return HTMLResponse("<p>Нет команды</p>", status_code=400)
+    text = (text or "").strip()
+    if not text or len(text) > 2000:
+        return HTMLResponse("<p>Сообщение пустое или слишком длинное</p>", status_code=400)
+    msg = TeamChatMessage(
+        event_id=user.event_id,
+        team_id=user.team_id,
+        sender_player_id=user.player_id,
+        text=text,
+    )
+    db.add(msg)
+    await db.commit()
+    # Вернуть обновлённый список сообщений (тот же partial, что и GET)
+    r = await db.execute(
+        select(TeamChatMessage, Player)
+        .join(Player, TeamChatMessage.sender_player_id == Player.id)
+        .where(
+            TeamChatMessage.team_id == user.team_id,
+            TeamChatMessage.event_id == user.event_id,
+        )
+        .order_by(TeamChatMessage.created_at.asc())
+    )
+    messages = r.all()
+    player_names = {}
+    for m, p in messages:
+        if p.id not in player_names:
+            rf = await db.execute(
+                select(RegistrationForm.full_name).where(
+                    RegistrationForm.event_id == user.event_id,
+                    RegistrationForm.tg_id == p.tg_id,
+                )
+            )
+            row = rf.first()
+            player_names[p.id] = row[0] if row else f"Участник {p.id}"
+    return templates.TemplateResponse(
+        "player/partials/team_chat.html",
+        {
+            "request": request,
+            "messages": messages,
+            "player_names": player_names,
+            "current_player_id": user.player_id,
         },
     )
 

@@ -97,6 +97,7 @@ class Team(Base):
     current_station = relationship("Station", back_populates="teams_at_station", foreign_keys=[current_station_id])
     players = relationship("Player", back_populates="team")
     station_visits = relationship("StationVisit", back_populates="team")
+    team_chat_messages = relationship("TeamChatMessage", back_populates="team", order_by="TeamChatMessage.created_at")
 
 
 class Player(Base):
@@ -116,6 +117,22 @@ class Player(Base):
     event = relationship("Event", back_populates="players")
     team = relationship("Team", back_populates="players")
     ratings = relationship("Rating", back_populates="player")
+    team_chat_sent = relationship("TeamChatMessage", back_populates="sender", foreign_keys="TeamChatMessage.sender_player_id")
+
+
+class TeamChatMessage(Base):
+    """Сообщения между участниками команды (напарниками) — видны в админке."""
+    __tablename__ = "team_chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), nullable=False)
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    sender_player_id: Mapped[int] = mapped_column(ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    team = relationship("Team", back_populates="team_chat_messages")
+    sender = relationship("Player", back_populates="team_chat_sent", foreign_keys=[sender_player_id])
 
 
 class Station(Base):

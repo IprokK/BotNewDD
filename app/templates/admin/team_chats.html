@@ -1,0 +1,18 @@
+{% extends "admin/base.html" %}
+{% block title %}Чаты команд{% endblock %}
+{% block content %}
+<h2>Чаты команд</h2>
+<p class="muted">Переписки между напарниками — для квеста</p>
+
+<div class="card">
+    {% for t in teams %}
+    <div style="padding: 12px 0; border-bottom: 1px solid var(--admin-border); display: flex; align-items: center; justify-content: space-between;">
+        <a href="/admin/team-chats/{{ t.id }}">{{ t.name }}</a>
+        <span class="muted">{{ msg_counts.get(t.id, 0) }} сообщ.</span>
+    </div>
+    {% else %}
+    <p class="muted">Нет команд или чаты пусты</p>
+    {% endfor %}
+</div>
+
+{% endblock %}

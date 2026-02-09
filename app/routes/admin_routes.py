@@ -27,6 +27,7 @@ from app.models import (
     StationHost,
     StationVisit,
     Team,
+    TeamChatMessage,
     TeamState,
 )
 from app.services import generate_qr_token, log_event, ws_manager
@@ -330,6 +331,71 @@ async def admin_registration_cancel(
         await db.commit()
         await notify_registration_cancelled(tg_id)
     return RedirectResponse(url="/admin/registrations", status_code=303)
+
+
+@router.get("/team-chats", response_class=HTMLResponse)
+async def admin_team_chats_list(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    """Список команд с чатами — просмотр переписок напарников."""
+    r = await db.execute(
+        select(Team)
+        .where(Team.event_id == user.event_id)
+        .order_by(Team.name)
+    )
+    teams = r.scalars().all()
+    r = await db.execute(
+        select(Team.id, func.count(TeamChatMessage.id).label("cnt"))
+        .outerjoin(TeamChatMessage, TeamChatMessage.team_id == Team.id)
+        .where(Team.event_id == user.event_id)
+        .group_by(Team.id)
+    )
+    msg_counts = {row[0]: row[1] for row in r.all()}
+    return templates.TemplateResponse(
+        "admin/team_chats.html",
+        {"request": request, "user": user, "teams": teams, "msg_counts": msg_counts},
+    )
+
+
+@router.get("/team-chats/{team_id}", response_class=HTMLResponse)
+async def admin_team_chat_detail(
+    request: Request,
+    team_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    """Просмотр переписки команды (напарников)."""
+    r = await db.execute(
+        select(Team).where(Team.id == team_id, Team.event_id == user.event_id)
+    )
+    team = r.scalar_one_or_none()
+    if not team:
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/admin/team-chats", status_code=303)
+    r = await db.execute(
+        select(TeamChatMessage, Player)
+        .join(Player, TeamChatMessage.sender_player_id == Player.id)
+        .where(TeamChatMessage.team_id == team_id)
+        .order_by(TeamChatMessage.created_at.asc())
+    )
+    messages = r.all()
+    player_names = {}
+    for msg, p in messages:
+        if p.id not in player_names:
+            rf = await db.execute(
+                select(RegistrationForm.full_name).where(
+                    RegistrationForm.event_id == user.event_id,
+                    RegistrationForm.tg_id == p.tg_id,
+                )
+            )
+            row = rf.first()
+            player_names[p.id] = row[0] if row else f"tg:{p.tg_id}"
+    return templates.TemplateResponse(
+        "admin/team_chat_detail.html",
+        {"request": request, "user": user, "team": team, "messages": messages, "player_names": player_names},
+    )
 
 
 @router.post("/content")
