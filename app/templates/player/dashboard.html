@@ -202,27 +202,39 @@
     window.openItem = function(id) {
         document.getElementById('item-' + id).style.display = 'block';
     };
+    let playerQrScanner = null;
     window.closeItem = function() {
+        if (playerQrScanner && playerQrScanner.isScanning) playerQrScanner.stop();
+        playerQrScanner = null;
         document.querySelectorAll('[id^="item-"]').forEach(el => { if (el.id.startsWith('item-')) el.style.display = 'none'; });
     };
-    window.startScanner = function() {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            document.getElementById('scan-result').innerHTML = '<p>Камера недоступна. Введите код вручную или используйте камеру телефона.</p><input type="text" placeholder="Код" style="padding:10px;width:100%;"><button onclick="alert(\'Добавлено\')" style="margin-top:8px;">Проверить</button>';
+    window.startScanner = async function() {
+        const resultDiv = document.getElementById('scan-result');
+        if (typeof Html5Qrcode === 'undefined') {
+            resultDiv.innerHTML = '<p>Библиотека сканирования не загружена. Введите код вручную:</p><input type="text" id="manual-scan-code" placeholder="Код из QR" style="padding:10px;width:100%;margin-top:8px;"><button onclick="onScanResult(document.getElementById(\'manual-scan-code\').value)" style="margin-top:8px;">Проверить</button>';
             return;
         }
-        document.getElementById('scan-result').innerHTML = '<p>Запуск камеры...</p>';
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(stream => {
-            const v = document.createElement('video');
-            v.srcObject = stream;
-            v.autoplay = true;
-            v.style.width = '100%';
-            v.style.borderRadius = '8px';
-            document.getElementById('scan-result').innerHTML = '';
-            document.getElementById('scan-result').appendChild(v);
-            document.getElementById('scan-result').innerHTML += '<p style="margin-top:12px;">Для полноценного сканирования QR установите приложение или введите код вручную</p>';
-        }).catch(() => {
-            document.getElementById('scan-result').innerHTML = '<p>Нет доступа к камере</p>';
-        });
+        resultDiv.innerHTML = '<p>Запуск камеры...</p>';
+        try {
+            resultDiv.innerHTML = '<div id="player-qr-reader"></div>';
+            playerQrScanner = new Html5Qrcode('player-qr-reader');
+            await playerQrScanner.start(
+                { facingMode: 'environment' },
+                { fps: 10, qrbox: { width: 220, height: 220 } },
+                (decoded) => {
+                    if (playerQrScanner && playerQrScanner.isScanning) playerQrScanner.stop();
+                    playerQrScanner = null;
+                    onScanResult(decoded);
+                },
+                () => {}
+            );
+        } catch (e) {
+            resultDiv.innerHTML = '<p>Камера недоступна (возможно, нет разрешения). Введите код вручную:</p><input type="text" id="manual-scan-code" placeholder="Код из QR" style="padding:10px;width:100%;margin-top:8px;"><button onclick="onScanResult(document.getElementById(\'manual-scan-code\').value)" style="margin-top:8px;">Проверить</button>';
+        }
+    };
+    window.onScanResult = function(decoded) {
+        const resultDiv = document.getElementById('scan-result');
+        resultDiv.innerHTML = '<div style="padding:16px;background:var(--success, #4a7c59);color:#fff;border-radius:var(--radius);margin-bottom:12px;">✅ Отсканировано: ' + (decoded && decoded.length > 80 ? decoded.substring(0, 80) + '…' : decoded) + '</div><button onclick="startScanner()" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;">📷 Сканировать ещё</button>';
     };
 })();
 </script>
