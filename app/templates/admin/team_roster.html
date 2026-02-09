@@ -1,0 +1,114 @@
+{% extends "admin/base.html" %}
+{% block title %}Состав команд{% endblock %}
+{% block content %}
+<style>
+    .roster-board { display: flex; gap: 20px; overflow-x: auto; padding-bottom: 16px; min-height: 320px; }
+    .roster-column { background: var(--admin-surface); border: 2px dashed var(--admin-border); border-radius: 12px; padding: 16px; min-width: 220px; min-height: 280px; }
+    .roster-column.drag-over { border-color: var(--admin-accent); background: rgba(88,166,255,0.1); }
+    .roster-column h3 { margin: 0 0 12px; font-size: 0.95rem; color: var(--admin-muted); padding-bottom: 8px; border-bottom: 1px solid var(--admin-border); }
+    .player-card { background: var(--admin-bg); padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; font-size: 0.9rem; cursor: grab; border: 1px solid transparent; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .player-card:hover { border-color: var(--admin-border); }
+    .player-card.sortable-ghost { opacity: 0.6; }
+    .player-card .name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+    .player-card .role { font-size: 0.75rem; color: var(--admin-muted); }
+    .player-card .remove-btn { background: transparent; border: none; color: var(--admin-muted); cursor: pointer; padding: 2px 6px; font-size: 1rem; line-height: 1; }
+    .player-card .remove-btn:hover { color: #f85149; }
+</style>
+
+<h2>Состав команд</h2>
+<p style="color:var(--admin-muted);">Перетаскивайте игроков между колонками. Перетащите в «Без команды» — убрать из команды.</p>
+
+<div class="roster-board" id="roster-board">
+    <div class="roster-column" data-team-id="" id="col-unassigned">
+        <h3>🚫 Без команды</h3>
+        <div class="player-list" data-team-id="">
+            {% for item in by_team.get(None, []) %}
+            <div class="player-card" data-player-id="{{ item.player.id }}" draggable="true">
+                <span class="name">{{ item.name }}</span>
+                <span class="role">—</span>
+            </div>
+            {% else %}
+            <p style="color:var(--admin-muted);font-size:0.85rem;">Пусто</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% for team in teams %}
+    <div class="roster-column" data-team-id="{{ team.id }}" id="col-{{ team.id }}">
+        <h3>{{ team.name }}</h3>
+        <div class="player-list" data-team-id="{{ team.id }}">
+            {% for item in by_team.get(team.id, []) %}
+            <div class="player-card" data-player-id="{{ item.player.id }}" draggable="true">
+                <span class="name">{{ item.name }}</span>
+                <span class="role">{{ item.player.role or 'A' }}</span>
+            </div>
+            {% else %}
+            <p style="color:var(--admin-muted);font-size:0.85rem;">Пусто</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+(function() {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+    function getTeamIdFromList(listEl) {
+        const col = listEl.closest('.roster-column');
+        const tid = col?.dataset.teamId;
+        return tid === '' || tid === undefined ? null : (tid ? parseInt(tid) : null);
+    }
+
+    Sortable.create(document.getElementById('col-unassigned').querySelector('.player-list'), {
+        group: 'players',
+        draggable: '.player-card',
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        onEnd: async function(evt) {
+            const playerId = evt.item?.dataset?.playerId;
+            const newList = evt.to;
+            const teamId = getTeamIdFromList(newList);
+            if (!playerId) return;
+            const res = await fetch(`/admin/players/${playerId}/team`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ team_id: teamId, role: 'ROLE_A' })
+            });
+            const data = await res.json();
+            if (!data.ok) {
+                evt.from.appendChild(evt.item);
+                alert(data.error || 'Ошибка');
+            }
+        }
+    });
+
+    document.querySelectorAll('.roster-column').forEach(col => {
+        if (col.id === 'col-unassigned') return;
+        const list = col.querySelector('.player-list');
+        if (!list) return;
+        Sortable.create(list, {
+            group: 'players',
+            draggable: '.player-card',
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            onEnd: async function(evt) {
+                const playerId = evt.item?.dataset?.playerId;
+                const newList = evt.to;
+                const teamId = getTeamIdFromList(newList);
+                if (!playerId) return;
+                const res = await fetch(`/admin/players/${playerId}/team`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ team_id: teamId, role: 'ROLE_A' })
+                });
+                const data = await res.json();
+                if (!data.ok) {
+                    evt.from.appendChild(evt.item);
+                    alert(data.error || 'Ошибка');
+                }
+            }
+        });
+    });
+})();
+</script>
+{% endblock %}

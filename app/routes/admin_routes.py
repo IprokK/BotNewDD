@@ -203,6 +203,46 @@ async def admin_add_player(
     return {"ok": True, "player_id": player.id}
 
 
+class SetPlayerTeamRequest(BaseModel):
+    team_id: int | None = None
+    role: str = "ROLE_A"
+
+
+@router.patch("/players/{player_id}/team")
+async def admin_set_player_team(
+    player_id: int,
+    req: SetPlayerTeamRequest,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    """Убрать игрока из команды (team_id=null) или переместить в другую команду."""
+    r = await db.execute(
+        select(Player).where(Player.id == player_id, Player.event_id == user.event_id)
+    )
+    player = r.scalar_one_or_none()
+    if not player:
+        return {"ok": False, "error": "Player not found"}
+    old_team_id = player.team_id
+    if req.team_id is None:
+        player.team_id = None
+        player.role = None
+    else:
+        r = await db.execute(select(Team).where(Team.id == req.team_id, Team.event_id == user.event_id))
+        team = r.scalar_one_or_none()
+        if not team:
+            return {"ok": False, "error": "Team not found"}
+        player.team_id = req.team_id
+        player.role = req.role if req.role in ("ROLE_A", "ROLE_B") else "ROLE_A"
+    await db.flush()
+    if player.team_id:
+        import asyncio
+        r = await db.execute(select(Team.name).where(Team.id == player.team_id))
+        team_name = r.scalar() or ""
+        asyncio.create_task(notify_player_assigned(player.tg_id, team_name))
+    await ws_manager.broadcast_admin(user.event_id, "admin:team_update", {"team_id": old_team_id or player.team_id})
+    return {"ok": True, "player_id": player.id, "team_id": player.team_id}
+
+
 @router.post("/teams/assign")
 async def admin_assign_player_form(
     tg_id: int = Form(...),
@@ -245,6 +285,41 @@ async def admin_create_station(
     db.add(station)
     await db.flush()
     return {"ok": True, "station_id": station.id}
+
+
+@router.get("/team-roster", response_class=HTMLResponse)
+async def admin_team_roster(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    """Состав команд — drag-and-drop для удаления/замены игроков."""
+    r = await db.execute(
+        select(Team).where(Team.event_id == user.event_id).order_by(Team.name)
+    )
+    teams = r.scalars().all()
+    r = await db.execute(
+        select(Player, RegistrationForm)
+        .outerjoin(
+            RegistrationForm,
+            (RegistrationForm.event_id == Player.event_id) & (RegistrationForm.tg_id == Player.tg_id),
+        )
+        .where(Player.event_id == user.event_id)
+    )
+    players_with_forms = r.all()
+    by_team = {t.id: [] for t in teams}
+    by_team[None] = []
+    for player, form in players_with_forms:
+        name = (form.full_name if form else None) or f"tg:{player.tg_id}"
+        item = {"player": player, "name": name}
+        if player.team_id:
+            by_team.setdefault(player.team_id, []).append(item)
+        else:
+            by_team[None].append(item)
+    return templates.TemplateResponse(
+        "admin/team_roster.html",
+        {"request": request, "user": user, "teams": teams, "by_team": by_team},
+    )
 
 
 @router.get("/registrations", response_class=HTMLResponse)
