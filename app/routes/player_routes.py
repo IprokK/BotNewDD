@@ -19,6 +19,7 @@ from app.models import (
     Player,
     Rating,
     RegistrationForm,
+    ScanCode,
     Station,
     StationVisit,
     Team,
@@ -93,6 +94,7 @@ async def player_dashboard(
     )
     player = r.scalar_one_or_none()
     player_role = (player.role or "A").replace("ROLE_", "") if player else "—"
+    inventory = list((player.player_progress or {}).get("inventory") or [])
 
     # Соседи по команде (напарники) — для ссылки «Написать в Telegram»
     teammates = []
@@ -117,6 +119,7 @@ async def player_dashboard(
             "pending_ratings": pending_ratings,
             "player_role": player_role,
             "teammates": teammates,
+            "inventory": inventory,
         },
     )
 
@@ -551,3 +554,37 @@ async def rating_submit(
     db.add(rating)
     await db.flush()
     return RedirectResponse(url="/player", status_code=303)
+
+
+@router.post("/player/scan")
+async def player_scan(
+    code: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_miniapp_access),
+):
+    """При сканировании QR — проверить код и добавить предмет в инвентарь."""
+    code = (code or "").strip()
+    if not code:
+        return {"ok": False, "error": "Код пустой"}
+
+    r = await db.execute(
+        select(ScanCode).where(ScanCode.event_id == user.event_id, ScanCode.code == code)
+    )
+    sc = r.scalar_one_or_none()
+    if not sc:
+        return {"ok": False, "error": "QR-код не найден"}
+
+    r = await db.execute(select(Player).where(Player.id == user.player_id))
+    player = r.scalar_one_or_none()
+    if not player:
+        return {"ok": False, "error": "Игрок не найден"}
+
+    progress = dict(player.player_progress or {})
+    inv = list(progress.get("inventory") or [])
+    if sc.item_key not in inv:
+        inv.append(sc.item_key)
+    progress["inventory"] = inv
+    player.player_progress = progress
+    await db.commit()
+
+    return {"ok": True, "item_key": sc.item_key, "inventory": inv}

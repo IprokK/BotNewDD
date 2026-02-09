@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import select, func
@@ -23,6 +23,7 @@ from app.models import (
     Player,
     Rating,
     RegistrationForm,
+    ScanCode,
     Station,
     StationHost,
     StationVisit,
@@ -396,6 +397,54 @@ async def admin_team_chat_detail(
         "admin/team_chat_detail.html",
         {"request": request, "user": user, "team": team, "messages": messages, "player_names": player_names},
     )
+
+
+@router.get("/qr-items", response_class=HTMLResponse)
+async def admin_qr_items(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    """QR-коды для предметов — при сканировании в mini-app игрок получает предмет."""
+    from app.item_definitions import ITEM_DEFINITIONS, OBTAINABLE_ITEM_KEYS
+    r = await db.execute(select(ScanCode).where(ScanCode.event_id == user.event_id).order_by(ScanCode.created_at.desc()))
+    scan_codes = r.scalars().all()
+    return templates.TemplateResponse(
+        "admin/qr_items.html",
+        {"request": request, "user": user, "scan_codes": scan_codes, "item_defs": ITEM_DEFINITIONS, "obtainable_keys": OBTAINABLE_ITEM_KEYS},
+    )
+
+
+@router.post("/qr-items")
+async def admin_create_qr_item(
+    item_key: str = Form(...),
+    name: str = Form(""),
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    import secrets
+    from app.item_definitions import OBTAINABLE_ITEM_KEYS
+    if item_key not in OBTAINABLE_ITEM_KEYS:
+        return RedirectResponse(url="/admin/qr-items?error=invalid_item", status_code=303)
+    code = f"q94_{secrets.token_hex(12)}"
+    sc = ScanCode(event_id=user.event_id, code=code, item_key=item_key, name=(name or None))
+    db.add(sc)
+    await db.commit()
+    return RedirectResponse(url="/admin/qr-items", status_code=303)
+
+
+@router.post("/qr-items/{item_id}/delete")
+async def admin_delete_qr_item(
+    item_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    r = await db.execute(select(ScanCode).where(ScanCode.id == item_id, ScanCode.event_id == user.event_id))
+    sc = r.scalar_one_or_none()
+    if sc:
+        await db.delete(sc)
+        await db.commit()
+    return RedirectResponse(url="/admin/qr-items", status_code=303)
 
 
 @router.post("/content")

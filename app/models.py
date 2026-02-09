@@ -71,6 +71,7 @@ class Event(Base):
     dialogue_threads = relationship("DialogueThread", back_populates="event")
     event_logs = relationship("EventLog", back_populates="event")
     registration_forms = relationship("RegistrationForm", back_populates="event")
+    scan_codes = relationship("ScanCode", back_populates="event")
 
 
 class Team(Base):
@@ -327,6 +328,22 @@ class RegistrationForm(Base):
     __table_args__ = (UniqueConstraint("event_id", "tg_id", name="uq_registration_forms_event_tg"),)
 
     event = relationship("Event", back_populates="registration_forms")
+
+
+class ScanCode(Base):
+    """QR-коды, при сканировании которых игрок получает предмет в инвентарь."""
+    __tablename__ = "scan_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), nullable=False)
+    code: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    item_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("event_id", "code", name="uq_scan_codes_event_code"),)
+
+    event = relationship("Event", back_populates="scan_codes")
 
 
 class EventUser(Base):

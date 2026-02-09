@@ -15,27 +15,33 @@
 <!-- Screen 1: Предметы -->
 <div class="screen active" id="screen-items">
     <h2 style="margin:0 0 16px;font-size:1.25rem;">Инвентарь</h2>
-    <div class="item-grid">
+    <div class="item-grid" id="inventory-grid">
         <div class="item-card" onclick="openItem('phone')">
             <div class="item-icon">📱</div>
             <div class="item-name">Ваш телефон</div>
             <div class="item-desc">Чаты, напарник, сканер</div>
         </div>
+        {% for item_key in inventory %}
+        {% if item_key == 'diary' %}
         <div class="item-card" onclick="openItem('diary')">
             <div class="item-icon">📖</div>
             <div class="item-name">Личный дневник</div>
             <div class="item-desc">Страницы, заметки</div>
         </div>
+        {% elif item_key == 'witch' %}
         <div class="item-card" onclick="openItem('witch')">
             <div class="item-icon">📕</div>
             <div class="item-name">Методичка ведьмы</div>
             <div class="item-desc">Рецепты, заклинания</div>
         </div>
-        <div class="item-card" onclick="openItem('other-phone')">
+        {% elif item_key == 'other_phone' %}
+        <div class="item-card" onclick="openItem('other_phone')">
             <div class="item-icon">📱</div>
             <div class="item-name">Чужой телефон</div>
             <div class="item-desc">Архив переписок</div>
         </div>
+        {% endif %}
+        {% endfor %}
     </div>
 </div>
 
@@ -146,7 +152,7 @@
         <p style="color:var(--muted);">Рецепты и заклинания откроются на станциях</p>
     </div>
 </div>
-<div id="item-other-phone" class="screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--surface);z-index:200;display:none;overflow-y:auto;">
+<div id="item-other_phone" class="screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--surface);z-index:200;display:none;overflow-y:auto;">
     <div style="padding:16px;padding-top:50px;">
         <button onclick="closeItem()" style="margin-bottom:16px;padding:8px 16px;background:var(--border);border:none;border-radius:var(--radius-sm);cursor:pointer;">← Назад</button>
         <h2 style="margin:0 0 16px;">📱 Чужой телефон</h2>
@@ -232,9 +238,25 @@
             resultDiv.innerHTML = '<p>Камера недоступна (возможно, нет разрешения). Введите код вручную:</p><input type="text" id="manual-scan-code" placeholder="Код из QR" style="padding:10px;width:100%;margin-top:8px;"><button onclick="onScanResult(document.getElementById(\'manual-scan-code\').value)" style="margin-top:8px;">Проверить</button>';
         }
     };
-    window.onScanResult = function(decoded) {
+    window.onScanResult = async function(decoded) {
         const resultDiv = document.getElementById('scan-result');
-        resultDiv.innerHTML = '<div style="padding:16px;background:var(--success, #4a7c59);color:#fff;border-radius:var(--radius);margin-bottom:12px;">✅ Отсканировано: ' + (decoded && decoded.length > 80 ? decoded.substring(0, 80) + '…' : decoded) + '</div><button onclick="startScanner()" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;">📷 Сканировать ещё</button>';
+        const code = (decoded || '').trim();
+        resultDiv.innerHTML = '<p>Проверка кода…</p>';
+        try {
+            const fd = new FormData();
+            fd.append('code', code);
+            const r = await fetch('/player/scan', { method: 'POST', body: fd });
+            const data = await r.json();
+            if (data.ok) {
+                const itemNames = { diary: 'Личный дневник', witch: 'Методичка ведьмы', other_phone: 'Чужой телефон' };
+                const name = itemNames[data.item_key] || data.item_key;
+                resultDiv.innerHTML = '<div style="padding:16px;background:var(--success,#4a7c59);color:#fff;border-radius:var(--radius);margin-bottom:12px;">✅ Получено: ' + name + '</div><p style="color:var(--muted);">Обновите страницу — предмет появится в инвентаре</p><button onclick="window.location.reload()" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;">Обновить</button>';
+            } else {
+                resultDiv.innerHTML = '<div style="padding:16px;background:#8b2635;color:#fff;border-radius:var(--radius);margin-bottom:12px;">❌ ' + (data.error || 'Неизвестный код') + '</div><button onclick="startScanner()" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;">📷 Сканировать ещё</button>';
+            }
+        } catch (e) {
+            resultDiv.innerHTML = '<div style="padding:16px;background:#8b2635;color:#fff;border-radius:var(--radius);">Ошибка сети</div><button onclick="startScanner()" style="margin-top:12px;width:100%;padding:12px;">📷 Сканировать ещё</button>';
+        }
     };
 })();
 </script>

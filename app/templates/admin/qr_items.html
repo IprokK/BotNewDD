@@ -1,0 +1,54 @@
+{% extends "admin/base.html" %}
+{% block title %}QR предметы{% endblock %}
+{% block content %}
+<h2>QR-коды для предметов</h2>
+<p style="color:var(--admin-muted)">Создайте QR-коды. При сканировании в mini-app игрок получит предмет в инвентарь.</p>
+
+<div class="card">
+    <h3>Создать новый QR</h3>
+    <form method="post" action="/admin/qr-items" style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+        <div>
+            <label>Предмет</label>
+            <select name="item_key" required>
+                {% for k in obtainable_keys %}
+                <option value="{{ k }}">{{ item_defs[k].name }} ({{ k }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label>Название (необязательно)</label>
+            <input type="text" name="name" placeholder="Напр. Дневник у станции 1">
+        </div>
+        <button type="submit">Создать QR</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Список QR-кодов</h3>
+    {% for sc in scan_codes %}
+    <div style="padding: 16px 0; border-bottom: 1px solid var(--admin-border); display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
+        <div class="qr-canvas" data-code="{{ sc.code }}" style="width: 120px; height: 120px; background: #fff; padding: 8px;"></div>
+        <div style="flex: 1; min-width: 200px;">
+            <strong>{{ item_defs.get(sc.item_key, {}).name or sc.item_key }}</strong>
+            {% if sc.name %}<span style="color:var(--admin-muted)"> — {{ sc.name }}</span>{% endif %}
+            <div style="font-size: 0.8rem; color: var(--admin-muted); margin-top: 4px; word-break: break-all;">Код: {{ sc.code }}</div>
+        </div>
+        <form method="post" action="/admin/qr-items/{{ sc.id }}/delete" style="display: inline;" onsubmit="return confirm('Удалить?');">
+            <button type="submit" style="background: #8b2635;">Удалить</button>
+        </form>
+    </div>
+    {% else %}
+    <p style="color:var(--admin-muted)">Пока нет QR-кодов</p>
+    {% endfor %}
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+document.querySelectorAll('.qr-canvas').forEach(function(el) {
+    const code = el.getAttribute('data-code');
+    if (code && typeof QRCode !== 'undefined') {
+        new QRCode(el, { text: code, width: 100, height: 100 });
+    }
+});
+</script>
+{% endblock %}
