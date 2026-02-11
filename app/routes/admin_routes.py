@@ -342,17 +342,136 @@ async def admin_delete_station_host(
     return RedirectResponse(url="/admin/station-hosts", status_code=303)
 
 
+@router.get("/stations", response_class=HTMLResponse)
+async def admin_stations_list(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    """Список станций — управление и информация."""
+    from sqlalchemy import func
+    r = await db.execute(
+        select(Station)
+        .where(Station.event_id == user.event_id)
+        .order_by(Station.name)
+    )
+    stations = r.scalars().all()
+    r = await db.execute(
+        select(Station.id, func.count(StationVisit.id).label("visits_count"))
+        .outerjoin(StationVisit, StationVisit.station_id == Station.id)
+        .where(Station.event_id == user.event_id)
+        .group_by(Station.id)
+    )
+    visits_by_station = {row[0]: row[1] for row in r.all()}
+    r = await db.execute(
+        select(Station.id, func.count(StationHost.id).label("hosts_count"))
+        .outerjoin(StationHost, StationHost.station_id == Station.id)
+        .where(Station.event_id == user.event_id)
+        .group_by(Station.id)
+    )
+    hosts_by_station = {row[0]: row[1] for row in r.all()}
+    return templates.TemplateResponse(
+        "admin/stations.html",
+        {
+            "request": request,
+            "user": user,
+            "stations": stations,
+            "visits_by_station": visits_by_station,
+            "hosts_by_station": hosts_by_station,
+        },
+    )
+
+
+@router.get("/stations/{station_id}", response_class=HTMLResponse)
+async def admin_station_detail(
+    request: Request,
+    station_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    """Просмотр и редактирование станции."""
+    r = await db.execute(
+        select(Station).where(
+            Station.id == station_id,
+            Station.event_id == user.event_id,
+        )
+    )
+    station = r.scalar_one_or_none()
+    if not station:
+        return RedirectResponse(url="/admin/stations", status_code=303)
+    r = await db.execute(
+        select(StationHost).where(StationHost.station_id == station_id)
+    )
+    hosts = r.scalars().all()
+    return templates.TemplateResponse(
+        "admin/station_detail.html",
+        {"request": request, "user": user, "station": station, "hosts": hosts},
+    )
+
+
+@router.post("/stations/{station_id}")
+async def admin_update_station(
+    station_id: int,
+    name: str = Form(...),
+    capacity: int = Form(2),
+    description: str = Form(""),
+    address: str = Form(""),
+    instructions: str = Form(""),
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    r = await db.execute(
+        select(Station).where(
+            Station.id == station_id,
+            Station.event_id == user.event_id,
+        )
+    )
+    station = r.scalar_one_or_none()
+    if not station:
+        return RedirectResponse(url="/admin/stations", status_code=303)
+    station.name = name.strip()
+    station.capacity = max(1, min(10, capacity))
+    station.config = dict(station.config or {})
+    station.config["description"] = (description or "").strip()
+    station.config["address"] = (address or "").strip()
+    station.config["instructions"] = (instructions or "").strip()
+    await db.commit()
+    return RedirectResponse(url=f"/admin/stations/{station_id}", status_code=303)
+
+
+@router.post("/stations/{station_id}/delete")
+async def admin_delete_station(
+    station_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    r = await db.execute(
+        select(Station).where(
+            Station.id == station_id,
+            Station.event_id == user.event_id,
+        )
+    )
+    station = r.scalar_one_or_none()
+    if station:
+        await db.delete(station)
+        await db.commit()
+    return RedirectResponse(url="/admin/stations", status_code=303)
+
+
 @router.post("/stations")
 async def admin_create_station(
+    request: Request,
     name: str = Form(...),
     capacity: int = Form(1),
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_admin),
 ):
-    station = Station(event_id=user.event_id, name=name, capacity=capacity)
+    station = Station(event_id=user.event_id, name=name.strip(), capacity=max(1, capacity))
     db.add(station)
-    await db.flush()
-    return {"ok": True, "station_id": station.id}
+    await db.commit()
+    if request.headers.get("HX-Request"):
+        return {"ok": True, "station_id": station.id}
+    return RedirectResponse(url="/admin/stations", status_code=303)
 
 
 @router.get("/team-roster", response_class=HTMLResponse)

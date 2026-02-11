@@ -1,0 +1,48 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ station.name }}{% endblock %}
+{% block content %}
+<h2>{{ station.name }}</h2>
+<p><a href="/admin/stations">← К списку станций</a></p>
+
+<div class="card">
+    <h3>Информация о станции</h3>
+    <form method="post" action="/admin/stations/{{ station.id }}">
+        <div style="margin-bottom: 16px;">
+            <label>Название</label>
+            <input type="text" name="name" value="{{ station.name }}" required>
+        </div>
+        <div style="margin-bottom: 16px;">
+            <label>Вместимость (макс. команд одновременно)</label>
+            <input type="number" name="capacity" value="{{ station.capacity }}" min="1" max="10" style="width: 80px;">
+        </div>
+        <div style="margin-bottom: 16px;">
+            <label>Описание (для ведущих)</label>
+            <textarea name="description" rows="3" placeholder="Краткое описание станции">{{ station.config.get('description', '') or '' }}</textarea>
+        </div>
+        <div style="margin-bottom: 16px;">
+            <label>Адрес / локация</label>
+            <input type="text" name="address" value="{{ station.config.get('address', '') or '' }}" placeholder="Напр. Главный корпус, ауд. 101">
+        </div>
+        <div style="margin-bottom: 16px;">
+            <label>Инструкции для ведущих</label>
+            <textarea name="instructions" rows="4" placeholder="Как проводить станцию, что говорить командам...">{{ station.config.get('instructions', '') or '' }}</textarea>
+        </div>
+        <div style="display: flex; gap: 12px;">
+            <button type="submit">Сохранить</button>
+            <form method="post" action="/admin/stations/{{ station.id }}/delete" style="display: inline;" onsubmit="return confirm('Удалить станцию? Ведущие и визиты будут отвязаны.');">
+                <button type="submit" style="background: #8b2635;">Удалить</button>
+            </form>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Ведущие ({{ hosts|length }})</h3>
+    <p style="color:var(--admin-muted);">Добавить ведущих можно в разделе <a href="/admin/station-hosts">Ведущие станций</a>.</p>
+    {% for h in hosts %}
+    <div style="padding: 8px 0; border-bottom: 1px solid var(--admin-border);">tg_id: {{ h.tg_id }}</div>
+    {% else %}
+    <p style="color:var(--admin-muted);">Нет ведущих</p>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "admin/base.html" %}
+{% block title %}Станции{% endblock %}
+{% block content %}
+<h2>Станции</h2>
+<p style="color:var(--admin-muted);">Список станций квеста. Создайте станции, добавьте ведущих, укажите описание и адрес.</p>
+
+<div class="card">
+    <h3>Создать станцию</h3>
+    <form method="post" action="/admin/stations" style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+        <div>
+            <label>Название</label>
+            <input type="text" name="name" placeholder="Станция 1" required>
+        </div>
+        <div>
+            <label>Вместимость (команд)</label>
+            <input type="number" name="capacity" value="2" min="1" max="10" style="width: 80px;">
+        </div>
+        <button type="submit">Создать</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Список станций ({{ stations|length }})</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="text-align: left; border-bottom: 1px solid var(--admin-border);">
+                <th style="padding: 10px;">Название</th>
+                <th style="padding: 10px;">Вместимость</th>
+                <th style="padding: 10px;">Визиты</th>
+                <th style="padding: 10px;">Ведущие</th>
+                <th style="padding: 10px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in stations %}
+            <tr style="border-bottom: 1px solid var(--admin-border);">
+                <td style="padding: 10px;"><a href="/admin/stations/{{ s.id }}">{{ s.name }}</a></td>
+                <td style="padding: 10px;">{{ s.capacity }}</td>
+                <td style="padding: 10px;">{{ visits_by_station.get(s.id, 0) }}</td>
+                <td style="padding: 10px;">{{ hosts_by_station.get(s.id, 0) }}</td>
+                <td style="padding: 10px;"><a href="/admin/stations/{{ s.id }}">Редактировать</a></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="padding: 16px; color: var(--admin-muted);">Нет станций</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
