@@ -1,11 +1,11 @@
 {% extends "admin/base.html" %}
 {% block title %}Заявки{% endblock %}
 {% block content %}
-<h2>Заявки на участие</h2>
+<h2>Заявки на участие ({{ all_forms|length }})</h2>
 <p>Игроки, зарегистрировавшиеся через бота (анкета). Добавьте их в команды вручную.</p>
 
 <div class="card">
-    <h3>Ожидают назначения</h3>
+    <h3>Ожидают назначения ({{ pending_with_forms|length }})</h3>
     {% for player, form in pending_with_forms %}
     <div class="team-card" style="margin-bottom: 24px; padding: 16px; border: 1px solid #333; border-radius: 8px; display: flex; gap: 16px; align-items: flex-start;">
         {% if form and form.photo_file_id %}
@@ -44,7 +44,7 @@
     {% endfor %}
 </div>
 
-<h3 style="margin-top: 32px;">Все анкеты</h3>
+<h3 style="margin-top: 32px;">Все анкеты ({{ all_forms|length }})</h3>
 <p class="muted">Полный список зарегистрировавшихся (можно открыть любую анкету)</p>
 <div class="card">
     {% for f in all_forms %}
