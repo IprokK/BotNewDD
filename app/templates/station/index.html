@@ -1,51 +1,60 @@
-{% extends "base.html" %}
-{% block title %}Станция {{ station.name }}{% endblock %}
+{% extends "station/base_host.html" %}
+{% block title %}{{ station.name }}{% endblock %}
+{% block station_name %}{{ station.name }}{% endblock %}
 {% block content %}
-<div class="card">
-    <h2>{{ station.name }}</h2>
-    <p id="scanned-team" style="min-height: 60px;"></p>
-    <button id="scan-btn" onclick="startScan()">📷 Сканировать QR</button>
-    <div id="visit-actions" style="display: none; margin-top: 16px;">
-        <button id="start-btn" onclick="startVisit()">Начать визит</button>
-        <button id="finish-btn" onclick="showFinishForm()" style="display: none;">Завершить визит</button>
+<div class="host-card">
+    <h2>Сканирование</h2>
+    <p id="scanned-team" style="min-height: 50px; color: var(--host-muted);">Нажмите кнопку и отсканируйте QR-код команды</p>
+    <button id="scan-btn" class="host-btn host-btn-primary" onclick="startScan()">📷 Сканировать QR</button>
+    <div id="visit-actions" style="display: none; margin-top: 16px; flex-direction: column; gap: 12px;">
+        <button id="start-btn" class="host-btn host-btn-success" onclick="startVisit()">▶ Начать визит</button>
+        <button id="finish-btn" class="host-btn host-btn-warning" onclick="showFinishForm()" style="display: none;">✓ Завершить визит</button>
     </div>
 </div>
 
-<div id="finish-form" class="card" style="display: none;">
+<div id="finish-form" class="host-card" style="display: none;">
     <h2>Завершение визита</h2>
     <form id="finish-frm" onsubmit="finishVisit(event)">
-        <label>Очки</label>
-        <input type="number" name="points_awarded" value="0" min="0">
-        <label>Оценка команды (1-5)</label>
-        <input type="number" name="host_rating" min="1" max="5">
-        <label>Заметки</label>
-        <textarea name="host_notes" rows="3"></textarea>
-        <button type="submit">Завершить</button>
+        <label>Очки команде</label>
+        <input type="number" name="points_awarded" value="0" min="0" max="100">
+        <label>Оценка команды (1–5 звёзд)</label>
+        <div class="rating-stars" id="rating-stars">
+            <button type="button" data-rating="1">★</button>
+            <button type="button" data-rating="2">★</button>
+            <button type="button" data-rating="3">★</button>
+            <button type="button" data-rating="4">★</button>
+            <button type="button" data-rating="5">★</button>
+        </div>
+        <input type="hidden" name="host_rating" id="host-rating-input" value="">
+        <label>Заметки (необязательно)</label>
+        <textarea name="host_notes" rows="3" placeholder="Комментарий о визите"></textarea>
+        <button type="submit" class="host-btn host-btn-success">Завершить визит</button>
     </form>
 </div>
 
-<div id="scanner-container" style="margin-top: 16px;"></div>
+<div id="scanner-container" class="host-card" style="display: none; margin-top: 16px;"></div>
 <div id="result" style="margin-top: 16px;"></div>
 {% endblock %}
 {% block scripts %}
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 let scannedToken = null;
 let scannedTeamId = null;
 let qrScanner = null;
+let selectedRating = 0;
 
 async function startScan() {
     const container = document.getElementById('scanner-container');
     const resultDiv = document.getElementById('result');
     resultDiv.innerHTML = '';
-    container.innerHTML = '<p>Запуск камеры...</p>';
+    container.style.display = 'block';
+    container.innerHTML = '<p style="text-align:center;padding:20px;">Запуск камеры...</p>';
     if (typeof Html5Qrcode !== 'undefined') {
         container.innerHTML = '<div id="qr-reader"></div>';
         qrScanner = new Html5Qrcode('qr-reader');
         try {
             await qrScanner.start(
                 { facingMode: 'environment' },
-                { fps: 5, qrbox: { width: 250, height: 250 } },
+                { fps: 8, qrbox: { width: 260, height: 260 } },
                 (decoded) => {
                     stopScan();
                     submitScan(decoded);
@@ -53,24 +62,26 @@ async function startScan() {
                 () => {}
             );
         } catch (e) {
-            container.innerHTML = '<p>Камера недоступна. Введите токен вручную:</p>' +
-                '<input type="text" id="manual-token" placeholder="Токен из QR">' +
-                '<button onclick="submitScan(document.getElementById(\'manual-token\').value)">Проверить</button>';
+            container.innerHTML = '<p style="margin-bottom:12px;">Камера недоступна. Введите токен вручную:</p>' +
+                '<input type="text" id="manual-token" placeholder="Токен из QR" style="margin-bottom:12px;">' +
+                '<button class="host-btn host-btn-primary" onclick="submitScan(document.getElementById(\'manual-token\').value)">Проверить</button>';
         }
     } else {
         container.innerHTML = '<input type="text" id="manual-token" placeholder="Вставьте токен из QR">' +
-            '<button onclick="submitScan(document.getElementById(\'manual-token\').value)">Проверить</button>';
+            '<button class="host-btn host-btn-primary" onclick="submitScan(document.getElementById(\'manual-token\').value)">Проверить</button>';
     }
 }
+
 function stopScan() {
     if (qrScanner && qrScanner.isScanning) qrScanner.stop();
+    document.getElementById('scanner-container').style.display = 'none';
     document.getElementById('scanner-container').innerHTML = '';
 }
 
 async function submitScan(token) {
     const res = await fetch('/station/scan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Cookie': document.cookie },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ token })
     });
@@ -78,19 +89,18 @@ async function submitScan(token) {
     if (data.ok) {
         scannedToken = token;
         scannedTeamId = data.team.id;
-        document.getElementById('scanned-team').innerHTML = `
-            <strong>${data.team.name}</strong><br>
-            Очки: ${data.team.score_total}<br>
-            Игроков: ${data.team.players.length}
-        `;
-        document.getElementById('visit-actions').style.display = 'block';
+        document.getElementById('scanned-team').innerHTML = '<strong style="color:var(--host-text);">' + data.team.name + '</strong><br>Очки: ' + data.team.score_total + '<br>Игроков: ' + data.team.players.length;
+        document.getElementById('visit-actions').style.display = 'flex';
         if (data.visit_state === 'started') {
             document.getElementById('start-btn').style.display = 'none';
-            document.getElementById('finish-btn').style.display = 'inline';
+            document.getElementById('finish-btn').style.display = 'flex';
+        } else {
+            document.getElementById('start-btn').style.display = 'flex';
+            document.getElementById('finish-btn').style.display = 'none';
         }
     } else {
-        document.getElementById('result').innerHTML = '<p style="color: var(--error)">' + (data.error || 'Ошибка') + '</p>';
-        document.getElementById('scanned-team').innerHTML = '';
+        document.getElementById('result').innerHTML = '<p style="color: var(--host-danger);">' + (data.error || 'Ошибка') + '</p>';
+        document.getElementById('scanned-team').innerHTML = 'Нажмите кнопку и отсканируйте QR-код команды';
     }
 }
 
@@ -104,13 +114,26 @@ async function startVisit() {
     const data = await res.json();
     if (data.ok) {
         document.getElementById('start-btn').style.display = 'none';
-        document.getElementById('finish-btn').style.display = 'inline';
+        document.getElementById('finish-btn').style.display = 'flex';
     }
 }
 
 function showFinishForm() {
     document.getElementById('finish-form').style.display = 'block';
+    selectedRating = 0;
+    document.querySelectorAll('.rating-stars button').forEach(b => b.classList.remove('active'));
+    document.getElementById('host-rating-input').value = '';
 }
+
+document.querySelectorAll('.rating-stars button').forEach(btn => {
+    btn.addEventListener('click', function() {
+        selectedRating = parseInt(this.dataset.rating);
+        document.querySelectorAll('.rating-stars button').forEach(b => {
+            b.classList.toggle('active', parseInt(b.dataset.rating) <= selectedRating);
+        });
+        document.getElementById('host-rating-input').value = selectedRating;
+    });
+});
 
 async function finishVisit(e) {
     e.preventDefault();
@@ -129,7 +152,7 @@ async function finishVisit(e) {
     });
     const data = await res.json();
     if (data.ok) {
-        document.getElementById('scanned-team').innerHTML = 'Визит завершён';
+        document.getElementById('scanned-team').innerHTML = '<span style="color:var(--host-success);">✓ Визит завершён</span>';
         document.getElementById('visit-actions').style.display = 'none';
         document.getElementById('finish-form').style.display = 'none';
         scannedToken = null;

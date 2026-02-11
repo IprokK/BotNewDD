@@ -274,6 +274,74 @@ async def admin_assign_player_form(
     return RedirectResponse(url="/admin/registrations", status_code=303)
 
 
+@router.get("/station-hosts", response_class=HTMLResponse)
+async def admin_station_hosts(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    """Ведущие станций — список и добавление."""
+    r = await db.execute(
+        select(StationHost, Station)
+        .join(Station, StationHost.station_id == Station.id)
+        .where(StationHost.event_id == user.event_id)
+        .order_by(Station.name)
+    )
+    hosts = r.all()
+    r = await db.execute(select(Station).where(Station.event_id == user.event_id).order_by(Station.name))
+    stations = r.scalars().all()
+    return templates.TemplateResponse(
+        "admin/station_hosts.html",
+        {"request": request, "user": user, "hosts": hosts, "stations": stations},
+    )
+
+
+@router.post("/station-hosts")
+async def admin_add_station_host(
+    tg_id: int = Form(...),
+    station_id: int = Form(...),
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    r = await db.execute(select(Station).where(Station.id == station_id, Station.event_id == user.event_id))
+    station = r.scalar_one_or_none()
+    if not station:
+        return RedirectResponse(url="/admin/station-hosts?error=station", status_code=303)
+    r = await db.execute(
+        select(StationHost).where(
+            StationHost.event_id == user.event_id,
+            StationHost.tg_id == tg_id,
+        )
+    )
+    existing = r.scalar_one_or_none()
+    if existing:
+        existing.station_id = station_id
+    else:
+        host = StationHost(event_id=user.event_id, tg_id=tg_id, station_id=station_id)
+        db.add(host)
+    await db.commit()
+    return RedirectResponse(url="/admin/station-hosts", status_code=303)
+
+
+@router.post("/station-hosts/{host_id}/delete")
+async def admin_delete_station_host(
+    host_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    r = await db.execute(
+        select(StationHost).where(
+            StationHost.id == host_id,
+            StationHost.event_id == user.event_id,
+        )
+    )
+    host = r.scalar_one_or_none()
+    if host:
+        await db.delete(host)
+        await db.commit()
+    return RedirectResponse(url="/admin/station-hosts", status_code=303)
+
+
 @router.post("/stations")
 async def admin_create_station(
     name: str = Form(...),

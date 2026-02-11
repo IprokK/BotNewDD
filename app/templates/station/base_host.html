@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>{% block title %}Станция{% endblock %}</title>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --host-bg: #0f1419;
+            --host-surface: #1a2332;
+            --host-card: #21262d;
+            --host-border: #2d3a4d;
+            --host-text: #e6edf3;
+            --host-muted: #8b949e;
+            --host-accent: #58a6ff;
+            --host-success: #3fb950;
+            --host-warning: #d29922;
+            --host-danger: #f85149;
+            --host-shadow: 0 2px 12px rgba(0,0,0,0.3);
+            --host-radius: 12px;
+            --host-radius-sm: 8px;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; font-family: 'Manrope', system-ui, sans-serif; background: var(--host-bg); color: var(--host-text); min-height: 100vh; min-height: 100dvh; }
+        .host-app { display: flex; flex-direction: column; min-height: 100vh; }
+        .host-header { position: sticky; top: 0; z-index: 100; background: var(--host-surface); border-bottom: 1px solid var(--host-border); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; }
+        .host-header h1 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+        .host-header .station-badge { background: var(--host-accent); color: #fff; padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; }
+        .host-main { flex: 1; overflow-y: auto; padding: 16px; padding-bottom: 24px; }
+        .host-card { background: var(--host-card); border: 1px solid var(--host-border); border-radius: var(--host-radius); padding: 20px; margin-bottom: 16px; box-shadow: var(--host-shadow); }
+        .host-card h2 { margin: 0 0 12px; font-size: 1rem; color: var(--host-muted); }
+        .host-btn { width: 100%; padding: 16px; border: none; border-radius: var(--host-radius); font-size: 1rem; font-weight: 600; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform 0.1s; }
+        .host-btn:active { transform: scale(0.98); }
+        .host-btn-primary { background: var(--host-accent); color: #fff; }
+        .host-btn-success { background: var(--host-success); color: #fff; }
+        .host-btn-warning { background: var(--host-warning); color: #1a1a1a; }
+        .host-btn-ghost { background: var(--host-surface); color: var(--host-text); border: 2px solid var(--host-border); }
+        input, select, textarea { width: 100%; padding: 12px; border-radius: var(--host-radius-sm); border: 1px solid var(--host-border); background: var(--host-bg); color: var(--host-text); margin-bottom: 12px; font-size: 1rem; font-family: inherit; }
+        label { display: block; margin-bottom: 6px; color: var(--host-muted); font-size: 0.9rem; }
+        .rating-stars { display: flex; gap: 8px; margin: 12px 0; }
+        .rating-stars button { width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--host-border); background: var(--host-surface); color: var(--host-muted); font-size: 1.2rem; cursor: pointer; }
+        .rating-stars button.active { border-color: var(--host-warning); background: rgba(210,153,34,0.2); color: var(--host-warning); }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="host-app">
+        <header class="host-header">
+            <span class="station-badge">{% block station_name %}Станция{% endblock %}</span>
+        </header>
+        <main class="host-main">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

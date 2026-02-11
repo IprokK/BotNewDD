@@ -1,0 +1,53 @@
+{% extends "admin/base.html" %}
+{% block title %}Ведущие станций{% endblock %}
+{% block content %}
+<h2>Ведущие станций</h2>
+<p style="color:var(--admin-muted);">Добавьте Telegram ID ведущих — они смогут открыть сайт станции со сканером QR и оценками.</p>
+
+<div class="card">
+    <h3>Добавить ведущего</h3>
+    <form method="post" action="/admin/station-hosts" style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+        <div>
+            <label>Telegram ID</label>
+            <input type="number" name="tg_id" placeholder="123456789" required>
+        </div>
+        <div>
+            <label>Станция</label>
+            <select name="station_id" required>
+                {% for s in stations %}
+                <option value="{{ s.id }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit">Добавить</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Список ведущих</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="text-align: left; border-bottom: 1px solid var(--admin-border);">
+                <th style="padding: 10px;">Станция</th>
+                <th style="padding: 10px;">Telegram ID</th>
+                <th style="padding: 10px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for host, station in hosts %}
+            <tr style="border-bottom: 1px solid var(--admin-border);">
+                <td style="padding: 10px;">{{ station.name }}</td>
+                <td style="padding: 10px;">{{ host.tg_id }}</td>
+                <td style="padding: 10px;">
+                    <form method="post" action="/admin/station-hosts/{{ host.id }}/delete" style="display: inline;" onsubmit="return confirm('Удалить ведущего?');">
+                        <button type="submit" style="background: #8b2635;">Удалить</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" style="padding: 16px; color: var(--admin-muted);">Пока нет ведущих</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
