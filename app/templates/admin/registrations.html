@@ -7,7 +7,13 @@
 <div class="card">
     <h3>Ожидают назначения</h3>
     {% for player, form in pending_with_forms %}
-    <div class="team-card" style="margin-bottom: 24px; padding: 16px; border: 1px solid #333; border-radius: 8px;">
+    <div class="team-card" style="margin-bottom: 24px; padding: 16px; border: 1px solid #333; border-radius: 8px; display: flex; gap: 16px; align-items: flex-start;">
+        {% if form and form.photo_file_id %}
+        <a href="/admin/registrations/{{ form.id }}" style="flex-shrink: 0;">
+            <img src="/admin/registrations/{{ form.id }}/photo" alt="" style="width: 56px; height: 56px; border-radius: 8px; object-fit: cover;">
+        </a>
+        {% endif %}
+        <div style="flex: 1;">
         <div style="margin-bottom: 12px;">
             <strong>{{ form.full_name if form else 'Без анкеты' }}</strong> (tg_id: {{ player.tg_id }})
             {% if form %}
@@ -31,6 +37,7 @@
             </select>
             <button type="submit">Добавить</button>
         </form>
+        </div>
     </div>
     {% else %}
     <p class="muted">Нет заявок</p>
@@ -42,6 +49,11 @@
 <div class="card">
     {% for f in all_forms %}
     <div style="padding: 8px 0; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 12px;">
+        {% if f.photo_file_id %}
+        <a href="/admin/registrations/{{ f.id }}" style="flex-shrink: 0;">
+            <img src="/admin/registrations/{{ f.id }}/photo" alt="" style="width: 40px; height: 40px; border-radius: 6px; object-fit: cover;">
+        </a>
+        {% endif %}
         <a href="/admin/registrations/{{ f.id }}">{{ f.full_name }}</a>
         <span class="muted"> — {{ f.university }}{% if f.university_other %} ({{ f.university_other }}){% endif %}, {{ f.created_at.strftime('%d.%m.%Y') if f.created_at else '' }}</span>
         <form method="post" action="/admin/registrations/{{ f.id }}/cancel" style="display: inline; margin-left: auto;" onsubmit="return confirm('Отменить анкету? Участник сможет заполнить её заново.');">

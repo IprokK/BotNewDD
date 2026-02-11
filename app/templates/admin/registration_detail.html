@@ -17,7 +17,13 @@
         <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Музыкальные предпочтения</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ form.music_preferences or '—' }}</td></tr>
         <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Фильмы / сериалы / игры</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ form.films_games or '—' }}</td></tr>
         <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Комментарий / пожелания</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ form.comment or '—' }}</td></tr>
-        <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Фото</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ 'Загружено' if form.photo_file_id else '—' }}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Фото</td><td style="padding: 8px; border-bottom: 1px solid #333;">
+            {% if form.photo_file_id %}
+            <a href="/admin/registrations/{{ form.id }}/photo" target="_blank" rel="noopener">
+                <img src="/admin/registrations/{{ form.id }}/photo" alt="Фото участника" style="max-width: 200px; max-height: 200px; border-radius: 8px; object-fit: cover;">
+            </a>
+            {% else %}—{% endif %}
+        </td></tr>
         <tr><td style="padding: 8px; border-bottom: 1px solid #333; font-weight: bold;">Согласие на обработку данных</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{ 'Да' if form.privacy_consent else 'Нет' }}</td></tr>
         <tr><td style="padding: 8px; font-weight: bold;">Дата подачи</td><td style="padding: 8px;">{{ form.created_at.strftime('%d.%m.%Y %H:%M') if form.created_at else '—' }}</td></tr>
     </table>

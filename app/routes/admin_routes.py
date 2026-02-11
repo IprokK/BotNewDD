@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import select, func
@@ -381,6 +381,52 @@ async def admin_registration_detail(
         "admin/registration_detail.html",
         {"request": request, "user": user, "form": form, "player": player},
     )
+
+
+@router.get("/registrations/{form_id}/photo")
+async def admin_registration_photo(
+    form_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    """Показать фото участника из анкеты (прокси с Telegram)."""
+    from config import settings
+    import httpx
+
+    r = await db.execute(
+        select(RegistrationForm).where(
+            RegistrationForm.id == form_id,
+            RegistrationForm.event_id == user.event_id,
+        )
+    )
+    form = r.scalar_one_or_none()
+    if not form or not form.photo_file_id:
+        return Response(status_code=404)
+    if not settings.telegram_bot_token:
+        return Response(status_code=503, content="Bot token not configured")
+    try:
+        async with httpx.AsyncClient() as client:
+            get_file = await client.get(
+                f"https://api.telegram.org/bot{settings.telegram_bot_token}/getFile",
+                params={"file_id": form.photo_file_id},
+                timeout=10,
+            )
+            get_file.raise_for_status()
+            data = get_file.json()
+            if not data.get("ok"):
+                return Response(status_code=404)
+            file_path = data["result"]["file_path"]
+            img_resp = await client.get(
+                f"https://api.telegram.org/file/bot{settings.telegram_bot_token}/{file_path}",
+                timeout=15,
+            )
+            img_resp.raise_for_status()
+            return Response(
+                content=img_resp.content,
+                media_type=img_resp.headers.get("content-type", "image/jpeg"),
+            )
+    except Exception:
+        return Response(status_code=502)
 
 
 @router.post("/registrations/{form_id}/cancel")
