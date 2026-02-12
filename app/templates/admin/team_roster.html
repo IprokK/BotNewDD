@@ -2,16 +2,52 @@
 {% block title %}Состав команд{% endblock %}
 {% block content %}
 <style>
-    .roster-board { display: flex; gap: 20px; overflow-x: auto; padding-bottom: 16px; min-height: 320px; }
-    .roster-column { background: var(--admin-surface); border: 2px dashed var(--admin-border); border-radius: 12px; padding: 16px; min-width: 220px; min-height: 280px; }
-    .roster-column.drag-over { border-color: var(--admin-accent); background: rgba(88,166,255,0.1); }
-    .roster-column h3 { margin: 0 0 12px; font-size: 0.95rem; color: var(--admin-muted); padding-bottom: 8px; border-bottom: 1px solid var(--admin-border); }
-    .player-card { background: var(--admin-bg); padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; font-size: 0.9rem; cursor: grab; border: 1px solid transparent; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .roster-board {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding-bottom: 16px;
+        min-height: 200px;
+        overflow: visible;
+    }
+    .roster-column {
+        background: var(--admin-surface);
+        border: 2px dashed var(--admin-border);
+        border-radius: 10px;
+        padding: 12px;
+        min-height: 100px;
+    }
+    .roster-column.roster-unassigned { flex: 1 1 180px; min-width: 180px; }
+    .roster-column.roster-team { flex: 0 0 130px; }
+    .roster-column.drag-over { border-color: var(--admin-accent); background: rgba(88,166,255,0.15); }
+    .roster-column h3 {
+        margin: 0 0 10px;
+        font-size: 0.9rem;
+        color: var(--admin-muted);
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--admin-border);
+    }
+    .roster-column.roster-team h3 { font-size: 0.85rem; }
+    .player-list { min-height: 36px; }
+    .player-card {
+        background: var(--admin-bg);
+        padding: 8px 10px;
+        border-radius: 6px;
+        margin-bottom: 6px;
+        font-size: 0.85rem;
+        cursor: grab;
+        border: 1px solid transparent;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+    }
+    .player-card:last-child { margin-bottom: 0; }
     .player-card:hover { border-color: var(--admin-border); }
-    .player-card.sortable-ghost { opacity: 0.6; }
-    .player-card .name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
-    .player-card .role { font-size: 0.75rem; color: var(--admin-muted); }
-    .player-card .remove-btn { background: transparent; border: none; color: var(--admin-muted); cursor: pointer; padding: 2px 6px; font-size: 1rem; line-height: 1; }
+    .player-card.sortable-ghost { opacity: 0.5; }
+    .player-card .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .player-card .role { font-size: 0.7rem; color: var(--admin-muted); flex-shrink: 0; }
+    .player-card .remove-btn { background: transparent; border: none; color: var(--admin-muted); cursor: pointer; padding: 2px 4px; font-size: 0.9rem; }
     .player-card .remove-btn:hover { color: #f85149; }
 </style>
 
@@ -19,7 +55,7 @@
 <p style="color:var(--admin-muted);">Перетаскивайте игроков между колонками. Перетащите в «Без команды» — убрать из команды.</p>
 
 <div class="roster-board" id="roster-board">
-    <div class="roster-column" data-team-id="" id="col-unassigned">
+    <div class="roster-column roster-unassigned" data-team-id="" id="col-unassigned">
         <h3>🚫 Без команды</h3>
         <div class="player-list" data-team-id="">
             {% for item in by_team.get(None, []) %}
@@ -28,12 +64,12 @@
                 <span class="role">—</span>
             </div>
             {% else %}
-            <p style="color:var(--admin-muted);font-size:0.85rem;">Пусто</p>
+            <div class="empty-placeholder" style="color:var(--admin-muted);font-size:0.8rem;">Пусто</div>
             {% endfor %}
         </div>
     </div>
     {% for team in teams %}
-    <div class="roster-column" data-team-id="{{ team.id }}" id="col-{{ team.id }}">
+    <div class="roster-column roster-team" data-team-id="{{ team.id }}" id="col-{{ team.id }}">
         <h3>{{ team.name }}</h3>
         <div class="player-list" data-team-id="{{ team.id }}">
             {% for item in by_team.get(team.id, []) %}
@@ -42,7 +78,7 @@
                 <span class="role">{{ item.player.role or 'A' }}</span>
             </div>
             {% else %}
-            <p style="color:var(--admin-muted);font-size:0.85rem;">Пусто</p>
+            <div class="empty-placeholder" style="color:var(--admin-muted);font-size:0.8rem;">Пусто</div>
             {% endfor %}
         </div>
     </div>
@@ -59,15 +95,25 @@
         return tid === '' || tid === undefined ? null : (tid ? parseInt(tid) : null);
     }
 
-    Sortable.create(document.getElementById('col-unassigned').querySelector('.player-list'), {
-        group: 'players',
+    const sortableOpts = {
+        group: { name: 'players', pull: true, put: true },
         draggable: '.player-card',
         animation: 150,
         ghostClass: 'sortable-ghost',
+        emptyInsertThreshold: 25,
         onEnd: async function(evt) {
             const playerId = evt.item?.dataset?.playerId;
             const newList = evt.to;
             const teamId = getTeamIdFromList(newList);
+            evt.from.querySelectorAll('.empty-placeholder').forEach(el => el.remove());
+            newList.querySelectorAll('.empty-placeholder').forEach(el => el.remove());
+            if (!evt.from.querySelector('.player-card')) {
+                const ph = document.createElement('div');
+                ph.className = 'empty-placeholder';
+                ph.style.cssText = 'color:var(--admin-muted);font-size:0.8rem;';
+                ph.textContent = 'Пусто';
+                evt.from.appendChild(ph);
+            }
             if (!playerId) return;
             const res = await fetch(`/admin/players/${playerId}/team`, {
                 method: 'PATCH',
@@ -80,34 +126,13 @@
                 alert(data.error || 'Ошибка');
             }
         }
-    });
+    };
+    Sortable.create(document.getElementById('col-unassigned').querySelector('.player-list'), sortableOpts);
 
-    document.querySelectorAll('.roster-column').forEach(col => {
-        if (col.id === 'col-unassigned') return;
+    document.querySelectorAll('.roster-column.roster-team').forEach(col => {
         const list = col.querySelector('.player-list');
         if (!list) return;
-        Sortable.create(list, {
-            group: 'players',
-            draggable: '.player-card',
-            animation: 150,
-            ghostClass: 'sortable-ghost',
-            onEnd: async function(evt) {
-                const playerId = evt.item?.dataset?.playerId;
-                const newList = evt.to;
-                const teamId = getTeamIdFromList(newList);
-                if (!playerId) return;
-                const res = await fetch(`/admin/players/${playerId}/team`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ team_id: teamId, role: 'ROLE_A' })
-                });
-                const data = await res.json();
-                if (!data.ok) {
-                    evt.from.appendChild(evt.item);
-                    alert(data.error || 'Ошибка');
-                }
-            }
-        });
+        Sortable.create(list, sortableOpts);
     });
 })();
 </script>
