@@ -244,9 +244,13 @@ async def dialogues_list(
     )
     threads = list(r.scalars().all())
     for t in threads:
-        first = next((m for m in sorted(t.messages, key=lambda x: x.order_index) if (m.payload or {}).get("text")), None)
+        ms_sorted = sorted(t.messages, key=lambda x: x.order_index)
+        first = next((m for m in ms_sorted if (m.payload or {}).get("text")), None)
         txt = (first.payload or {}).get("text", "") if first else ""
         t.preview = (txt[:60] + "…") if len(txt) > 60 else (txt or None)
+        chars = (t.config or {}).get("characters") or {}
+        char_name = (first.payload or {}).get("character") if first else None
+        t.avatar_url = (chars.get(char_name) or {}).get("avatar") if char_name else None
     team = None
     if user.team_id:
         r = await db.execute(select(Team).where(Team.id == user.team_id))
@@ -260,10 +264,27 @@ async def dialogues_list(
     )
 
 
-def _check_conditions(m, user, player, team_id, replied_ids, visited_station_ids) -> bool:
+def _check_conditions(m, user, player, team_id, replied_ids, visited_station_ids, team_progress=None, thread_key=None) -> bool:
     """Проверка условий показа сообщения."""
     rules = m.gate_rules or {}
     ct = rules.get("condition_type", "immediate")
+    # Админ: force_reveal — показать сообщение досрочно
+    if team_progress and thread_key:
+        overrides = team_progress.get("dialogue_overrides") or {}
+        thr_over = overrides.get(thread_key) or {}
+        force_ids = thr_over.get("force_reveal_message_ids") or []
+        if m.id in force_ids:
+            return True
+        hold_until = thr_over.get("hold_until")
+        if hold_until:
+            try:
+                t = datetime.fromisoformat(hold_until.replace("Z", "+00:00"))
+                if t.tzinfo is None:
+                    t = t.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) < t:
+                    return False  # Админ придержал
+            except Exception:
+                pass
     if ct == "immediate":
         return True
     if ct == "scheduled":
@@ -333,9 +354,12 @@ async def dialogue_view(
         )
         visited_station_ids = {row[0] for row in r.all()}
 
+    team_progress = (team.team_progress or {}) if team else {}
+    check = lambda m: _check_conditions(m, user, player, user.team_id, replied_ids, visited_station_ids, team_progress, thread.key)
+
     msgs_by_id = {m.id: m for m in thread.messages}
     visible = []
-    pending_reply = None  # Message waiting for player reply
+    pending_reply = None
     i = 0
     messages_sorted = sorted(thread.messages, key=lambda x: x.order_index)
     while i < len(messages_sorted):
@@ -343,7 +367,7 @@ async def dialogue_view(
         if m.audience not in (ContentAudience.TEAM.value, role):
             i += 1
             continue
-        if not _check_conditions(m, user, player, user.team_id, replied_ids, visited_station_ids):
+        if not check(m):
             i += 1
             continue
         visible.append(m)
@@ -360,9 +384,8 @@ async def dialogue_view(
                 if rep and rep.next_message_id and rep.next_message_id in msgs_by_id:
                     next_m = msgs_by_id[rep.next_message_id]
                     if next_m not in visible and next_m.audience in (ContentAudience.TEAM.value, role):
-                        if _check_conditions(next_m, user, player, user.team_id, replied_ids, visited_station_ids):
+                        if check(next_m):
                             visible.append(next_m)
-                            # Continue from next message
                             idx = messages_sorted.index(next_m) if next_m in messages_sorted else i + 1
                             i = idx + 1
                             continue
@@ -371,6 +394,19 @@ async def dialogue_view(
                 break
         i += 1
 
+    # Вычисляем show_delay и delete_after для каждого сообщения
+    cumulative = 0
+    enriched = []
+    for m in visible:
+        rules = m.gate_rules or {}
+        delay_prev = rules.get("delay_after_previous_seconds") or 0
+        show_delay = cumulative
+        cumulative += delay_prev
+        delete_after = (m.payload or {}).get("delete_after_seconds") or 0
+        enriched.append({"msg": m, "show_delay_seconds": show_delay, "delete_after_seconds": delete_after})
+
+    characters = ((thread.config or {}).get("characters") or {})
+
     player_role = (player.role or "A").replace("ROLE_", "") if player else "—"
     return templates.TemplateResponse(
         "player/dialogue.html",
@@ -378,10 +414,11 @@ async def dialogue_view(
             "request": request,
             "user": user,
             "thread": thread,
-            "messages": visible,
+            "messages_enriched": enriched,
             "pending_reply": pending_reply,
             "team": team,
             "player_role": player_role,
+            "characters": characters,
         },
     )
 
@@ -435,26 +472,34 @@ async def dialogue_reply(
             db.add(reply)
             await db.flush()
 
-    if next_msg:
-        sender = (next_msg.payload or {}).get("character", "Ответ")
-        text = (next_msg.payload or {}).get("text", "")
-        opts = (next_msg.payload or {}).get("reply_options") or []
+    def _render_in_msg(msg, add_opts=True):
+        p = msg.payload or {}
+        sender = p.get("character", "Ответ")
+        text = p.get("text", "")
+        chars = (thread.config or {}).get("characters") or {}
+        avatar_url = (chars.get(sender) or {}).get("avatar")
+        av_inner = f'<img src="{html.escape(avatar_url)}" alt="">' if avatar_url else html.escape((sender[1:2] if sender.startswith("@") else sender[:1]) or "?")
         opts_html = ""
-        if opts:
-            opts_html = '<div class="quick-replies" style="margin-top:12px;">'
-            for o in opts:
-                nid = o.get("next_message_id")
-                d = int(o.get("delay_seconds") or 0)
-                opts_html += f'<form hx-post="/player/dialogues/{key}/reply" hx-target="#dialogue-messages" hx-swap="beforeend" style="display:inline;"><input type="hidden" name="message" value="{html.escape(o.get("text", ""))}"><input type="hidden" name="message_id" value="{next_msg.id}"><input type="hidden" name="next_message_id" value="{nid or ""}"><input type="hidden" name="delay_seconds" value="{d}"><button type="submit" class="quick-reply">{html.escape(o.get("text", ""))}</button></form> '
-            opts_html += "</div>"
+        if add_opts:
+            opts = p.get("reply_options") or []
+            if opts:
+                opts_html = '<div style="margin-top:12px;">'
+                for o in opts:
+                    nid = o.get("next_message_id")
+                    d = int(o.get("delay_seconds") or 0)
+                    opts_html += f'<form hx-post="/player/dialogues/{key}/reply" hx-target="#dialogue-messages" hx-swap="beforeend" style="display:inline;"><input type="hidden" name="message" value="{html.escape(o.get("text", ""))}"><input type="hidden" name="message_id" value="{msg.id}"><input type="hidden" name="next_message_id" value="{nid or ""}"><input type="hidden" name="delay_seconds" value="{d}"><button type="submit" class="quick-reply">{html.escape(o.get("text", ""))}</button></form> '
+                opts_html += "</div>"
+        del_after = p.get("delete_after_seconds") or 0
+        da = f' data-delete-after="{del_after}"' if del_after else ""
+        return f'<div class="msg-row in"{da}><div class="msg-avatar">{av_inner}</div><div class="msg-bubble"><div class="sender">{html.escape(sender)}</div>{html.escape(text)}{opts_html}</div></div>'
+
+    if next_msg:
         delay = max(0, int(delay_seconds or 0))
-        next_bubble = f'<div class="msg-bubble in"><div class="sender">{html.escape(sender)}</div>{html.escape(text)}{opts_html}</div>'
+        next_bubble = _render_in_msg(next_msg)
         if delay > 0:
-            next_bubble = f'<div class="msg-delayed" style="opacity:0;animation:fadeInMsg 0.3s {delay}s forwards;">{next_bubble}</div><style>@keyframes fadeInMsg{{to{{opacity:1;}}}}</style>'
-        return HTMLResponse(
-            f'<div class="msg-bubble out" style="margin-left:auto;"><div class="sender">Вы</div>{html.escape(message)}</div>'
-            + next_bubble
-        )
+            next_bubble = f'<div class="msg-delayed" data-delay-seconds="{delay}" style="opacity:0;animation:fadeInMsg 0.3s {delay}s forwards;">{next_bubble}</div><style>@keyframes fadeInMsg{{to{{opacity:1;}}}}</style>'
+        out_bubble = f'<div class="msg-row out"><div class="msg-avatar">Я</div><div class="msg-bubble"><div class="sender">Вы</div>{html.escape(message)}</div></div>'
+        return HTMLResponse(out_bubble + next_bubble)
 
     for m in sorted(thread.messages, key=lambda x: x.order_index):
         opts = (m.payload or {}).get("reply_options") or []
@@ -474,19 +519,15 @@ async def dialogue_reply(
                         )
                         db.add(reply)
                         await db.flush()
-                        sender = (next_msg.payload or {}).get("character", "Ответ")
-                        text = (next_msg.payload or {}).get("text", "")
                         delay = max(0, int(o.get("delay_seconds") or delay_seconds or 0))
-                        next_bubble = f'<div class="msg-bubble in"><div class="sender">{html.escape(sender)}</div>{html.escape(text)}</div>'
+                        next_bubble = _render_in_msg(next_msg, add_opts=False)
                         if delay > 0:
                             next_bubble = f'<div class="msg-delayed" style="opacity:0;animation:fadeInMsg 0.3s {delay}s forwards;">{next_bubble}</div><style>@keyframes fadeInMsg{{to{{opacity:1;}}}}</style>'
-                        return HTMLResponse(
-                            f'<div class="msg-bubble out" style="margin-left:auto;"><div class="sender">Вы</div>{html.escape(message)}</div>'
-                            + next_bubble
-                        )
+                        out_bubble = f'<div class="msg-row out"><div class="msg-avatar">Я</div><div class="msg-bubble"><div class="sender">Вы</div>{html.escape(message)}</div></div>'
+                        return HTMLResponse(out_bubble + next_bubble)
+    out_bubble = f'<div class="msg-row out"><div class="msg-avatar">Я</div><div class="msg-bubble"><div class="sender">Вы</div>{html.escape(message)}</div></div>'
     return HTMLResponse(
-        f'<div class="msg-bubble out" style="margin-left:auto;"><div class="sender">Вы</div>{html.escape(message)}</div>'
-        '<div class="msg-bubble in"><div class="sender">—</div>Нет ответа на это сообщение</div>'
+        out_bubble + '<div class="msg-row in"><div class="msg-avatar">—</div><div class="msg-bubble"><div class="sender">—</div>Нет ответа на это сообщение</div></div>'
     )
 
 

@@ -12,6 +12,7 @@
     .route-name { font-weight: 600; font-size: 1rem; margin-bottom: 2px; }
     .route-addr { font-size: 0.85rem; color: var(--muted); margin-top: 4px; }
     .route-hint { font-size: 0.8rem; color: var(--accent); margin-top: 6px; }
+    .route-mask { letter-spacing: 0.2em; color: var(--muted); }
 </style>
 {% endblock %}
 {% block team_name %}{{ team.name if team else '—' }}{% endblock %}
@@ -66,18 +67,22 @@
     {% if all_stations %}
     <div class="route-list">
         {% for s in all_stations %}
-        <div class="route-item {% if s.id in visited_station_ids %}route-done{% endif %} {% if s.id == current_station_id %}route-current{% endif %}">
+        {% set is_revealed = s.id in visited_station_ids or s.id == current_station_id %}
+        <div class="route-item {% if s.id in visited_station_ids %}route-done{% endif %} {% if s.id == current_station_id %}route-current{% endif %} {% if not is_revealed %}route-masked{% endif %}">
             <div class="route-num">{{ loop.index }}</div>
             <div class="route-content">
                 <div class="route-name">
                     {% if s.id in visited_station_ids %}✅{% elif s.id == current_station_id %}📍{% else %}○{% endif %}
-                    {{ s.name }}
+                    {% if is_revealed %}{{ s.name }}{% else %}<span class="route-mask">???</span>{% endif %}
                 </div>
-                {% if (s.config or {}).get('address') %}
+                {% if is_revealed and (s.config or {}).get('address') %}
                 <div class="route-addr">{{ (s.config or {}).get('address') }}</div>
                 {% endif %}
                 {% if s.id == current_station_id and team and team.current_state in ('assigned', 'in_visit') %}
                 <div class="route-hint">Покажите QR ведущему при прибытии</div>
+                {% endif %}
+                {% if not is_revealed %}
+                <div class="route-addr" style="font-style:italic;">Следуйте подсказкам</div>
                 {% endif %}
             </div>
         </div>

@@ -47,7 +47,8 @@
             <a href="/admin" class="{% if request.url.path == '/admin' %}active{% endif %}">📋 Live Ops</a>
             <a href="/admin/registrations" class="{% if 'registrations' in request.url.path %}active{% endif %}">✍️ Заявки</a>
             <a href="/admin/team-roster" class="{% if 'team-roster' in request.url.path %}active{% endif %}">👥 Состав команд</a>
-            <a href="/admin/dialogues" class="{% if request.url.path.startswith('/admin/dialogues') %}active{% endif %}">💬 Диалоги</a>
+            <a href="/admin/dialogues" class="{% if request.url.path.startswith('/admin/dialogues') and 'quest-control' not in request.url.path %}active{% endif %}">💬 Диалоги</a>
+            <a href="/admin/quest-control" class="{% if 'quest-control' in request.url.path %}active{% endif %}">⏸️ Управление квестом</a>
             <a href="/admin/content" class="{% if 'content' in request.url.path %}active{% endif %}">📄 Контент</a>
             <a href="/admin/qr-items" class="{% if 'qr-items' in request.url.path %}active{% endif %}">📷 QR предметы</a>
             <a href="/admin/analytics" class="{% if 'analytics' in request.url.path %}active{% endif %}">📊 Аналитика</a>

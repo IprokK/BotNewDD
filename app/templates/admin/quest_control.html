@@ -1,0 +1,52 @@
+{% extends "admin/base.html" %}
+{% block title %}Управление квестом{% endblock %}
+{% block content %}
+<h2>⏸️ Управление квестом</h2>
+<p style="color:var(--admin-muted);">Придержать отправку сообщений или досрочно показать их для конкретной команды.</p>
+
+<div class="card" style="margin-bottom:20px;">
+    <h3>Выбор команды</h3>
+    <form method="get" action="/admin/quest-control" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <select name="team_id" onchange="this.form.submit()">
+            <option value="">— Выберите команду —</option>
+            {% for t in teams %}
+            <option value="{{ t.id }}" {% if team and team.id == t.id %}selected{% endif %}>{{ t.name }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+{% if team %}
+<div class="card">
+    <h3>Настройки для {{ team.name }}</h3>
+    {% for thr in threads %}
+    {% set over = overrides_by_thread.get(thr.key) or {} %}
+    <div style="border:1px solid var(--admin-border);border-radius:8px;padding:16px;margin-bottom:16px;">
+        <h4 style="margin:0 0 12px;">Диалог: {{ thr.title or thr.key }}</h4>
+        <form method="post" action="/admin/quest-control">
+            <input type="hidden" name="team_id" value="{{ team.id }}">
+            <input type="hidden" name="thread_key" value="{{ thr.key }}">
+            <div style="display:grid;gap:12px;">
+                <div>
+                    <label style="display:block;font-size:0.85rem;color:var(--admin-muted);margin-bottom:4px;">Придержать до (не показывать новые сообщения до этой даты)</label>
+                    <input type="datetime-local" name="hold_until" value="{{ (over.get('hold_until') or '')[:16] }}" style="width:100%;max-width:280px;">
+                    <label style="margin-left:8px;"><input type="checkbox" name="clear_hold" value="1"> Снять задержку</label>
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.85rem;color:var(--admin-muted);margin-bottom:4px;">Досрочно показать сообщения (ID через пробел или запятую)</label>
+                    <input type="text" name="force_reveal_ids" value="{{ (over.get('force_reveal_message_ids') or [])|join(', ') }}" placeholder="1, 2, 3" style="width:100%;max-width:280px;">
+                    <label style="margin-left:8px;"><input type="checkbox" name="clear_force" value="1"> Сбросить</label>
+                </div>
+                <div style="font-size:0.8rem;color:var(--admin-muted);">
+                    ID сообщений: {% for m in thr.messages|sort(attribute='order_index') %}{{ m.id }} ({{ (m.payload or {}).get('character','—') }}){% if not loop.last %}, {% endif %}{% endfor %}
+                </div>
+            </div>
+            <button type="submit" style="margin-top:12px;">Сохранить</button>
+        </form>
+    </div>
+    {% else %}
+    <p style="color:var(--admin-muted);">Нет диалогов</p>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

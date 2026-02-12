@@ -4,30 +4,65 @@
 {% block points %}{{ team.score_total if team else 0 }}{% endblock %}
 {% block content %}
 <style>
-    .chat-list { padding: 0 4px; }
-    .chat-item { display: flex; align-items: center; padding: 14px 12px; background: var(--surface); border-radius: var(--radius); margin-bottom: 8px; box-shadow: var(--shadow); text-decoration: none; color: inherit; gap: 14px; transition: background 0.2s; }
+    .chats-container { padding: 0 4px 24px; }
+    .chats-header { padding: 16px 0; display: flex; align-items: center; justify-content: space-between; }
+    .chats-title { margin: 0; font-size: 1.25rem; font-weight: 600; }
+    .chat-item {
+        display: flex;
+        align-items: center;
+        padding: 14px 16px;
+        background: var(--surface);
+        border-radius: var(--radius);
+        margin-bottom: 10px;
+        box-shadow: var(--shadow);
+        text-decoration: none;
+        color: inherit;
+        gap: 14px;
+        transition: background 0.2s;
+    }
     .chat-item:active { background: var(--border); }
-    .chat-avatar { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #7c3aed); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 1.2rem; flex-shrink: 0; }
+    .chat-avatar {
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--accent), #7c3aed);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 1.2rem;
+        font-weight: 600;
+        flex-shrink: 0;
+        overflow: hidden;
+    }
+    .chat-avatar img { width: 100%; height: 100%; object-fit: cover; }
     .chat-info { flex: 1; min-width: 0; }
-    .chat-name { font-weight: 600; font-size: 1rem; margin-bottom: 2px; }
+    .chat-name { font-weight: 600; font-size: 1rem; margin-bottom: 4px; }
     .chat-preview { font-size: 0.85rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .chat-meta { font-size: 0.75rem; color: var(--muted); flex-shrink: 0; }
+    .chat-arrow { color: var(--muted); font-size: 1.2rem; flex-shrink: 0; }
 </style>
-<div style="padding: 0 0 20px;">
-    <a href="/player" style="color:var(--accent);text-decoration:none;font-size:0.9rem;">← Назад</a>
-    <h2 style="margin:16px 0;">Чаты</h2>
+<div class="chats-container">
+    <div class="chats-header">
+        <h2 class="chats-title">Чаты</h2>
+    </div>
     <div class="chat-list">
         {% for t in threads %}
         <a href="/player/dialogues/{{ t.key }}" class="chat-item">
-            <div class="chat-avatar">{{ (t.title or t.key)[:1]|upper }}</div>
+            <div class="chat-avatar">
+                {% if t.avatar_url %}
+                <img src="{{ t.avatar_url }}" alt="">
+                {% else %}
+                {{ (t.title or t.key)[:1]|upper }}
+                {% endif %}
+            </div>
             <div class="chat-info">
                 <div class="chat-name">{{ t.title or t.key }}</div>
-                <div class="chat-preview">{% if t.preview %}{{ t.preview }}{% else %}Диалог · {{ t.type }}{% endif %}</div>
+                <div class="chat-preview">{% if t.preview %}{{ t.preview }}{% else %}Диалог{% endif %}</div>
             </div>
-            <div class="chat-meta">›</div>
+            <div class="chat-arrow">›</div>
         </a>
         {% else %}
-        <p style="color:var(--muted);padding:20px;">Нет диалогов</p>
+        <p style="color:var(--muted);padding:24px;text-align:center;">Нет диалогов</p>
         {% endfor %}
     </div>
 </div>

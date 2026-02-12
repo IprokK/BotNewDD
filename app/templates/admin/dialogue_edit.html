@@ -18,6 +18,14 @@
 <p><a href="/admin/dialogues" style="color:var(--admin-accent);">← К списку диалогов</a> · <a href="/admin/dialogues/{{ thread.id }}/graph" style="color:var(--admin-accent);">📊 Редактор графа</a></p>
 <h2>{{ thread.title or thread.key }}</h2>
 <p style="color:var(--admin-muted);">Тип: {{ thread.type }} | Ключ: {{ thread.key }}</p>
+<div class="card" style="margin-bottom:20px;">
+    <h3>Персонажи (аватарки)</h3>
+    <p style="font-size:0.9rem;color:var(--admin-muted);">Формат: @ник — URL аватарки. Пример: @anna — https://....</p>
+    <form method="post" action="/admin/dialogues/{{ thread.id }}/characters" style="display:flex;flex-direction:column;gap:12px;">
+        <textarea name="characters_json" rows="6" placeholder='{"@anna": {"avatar": "https://..."}, "@bot": {"avatar": ""}}' style="font-family:monospace;">{{ characters_json }}</textarea>
+        <button type="submit">Сохранить персонажей</button>
+    </form>
+</div>
 
 <div class="dialog-editor">
     <div class="card">
@@ -42,8 +50,8 @@
         <h3>Добавить сообщение</h3>
         <form method="post" action="/admin/dialogues/{{ thread.id }}/messages" class="form-grid">
             <div>
-                <label>От чьего имени (отправитель)</label>
-                <input type="text" name="character" placeholder="Режиссёр, Костюмер, Напарник...">
+                <label>От чьего имени (отправитель, с @)</label>
+                <input type="text" name="character" placeholder="@anna, @bot, @режиссёр...">
             </div>
             <div>
                 <label>Кому показывать</label>
@@ -75,9 +83,17 @@
                 <input type="number" name="after_message_id" placeholder="ID сообщения">
             </div>
             <div>
+                <label>Задержка после предыдущего (сек)</label>
+                <input type="number" name="delay_after_previous" min="0" value="0" placeholder="0">
+            </div>
+            <div>
+                <label>Удалить через N сек после прочтения</label>
+                <input type="number" name="delete_after_seconds" min="0" value="0" placeholder="0 = не удалять">
+            </div>
+            <div>
                 <label>Варианты ответа (JSON, для интерактивных)</label>
                 <textarea name="reply_options" rows="4" placeholder='[{"text": "Согласен", "next_message_id": 2, "delay_seconds": 10}, {"text": "Отказ", "next_message_id": 3}]'></textarea>
-                <small style="color:var(--admin-muted);">next_message_id — ID сообщения после выбора; delay_seconds — задержка перед показом (сек)</small>
+                <small style="color:var(--admin-muted);">next_message_id — ID сообщения после выбора; delay_seconds — задержка после ответа (сек)</small>
             </div>
             <button type="submit">Добавить</button>
         </form>

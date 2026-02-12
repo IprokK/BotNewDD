@@ -718,6 +718,89 @@ async def admin_team_chat_detail(
     )
 
 
+@router.get("/quest-control", response_class=HTMLResponse)
+async def admin_quest_control_page(
+    request: Request,
+    team_id: int = 0,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    """Вмешательство в квест: придержать или досрочно показать сообщения для команды/игрока."""
+    r = await db.execute(
+        select(Team).where(Team.event_id == user.event_id).order_by(Team.name)
+    )
+    teams = r.scalars().all()
+    r = await db.execute(
+        select(DialogueThread)
+        .options(selectinload(DialogueThread.messages))
+        .where(DialogueThread.event_id == user.event_id)
+    )
+    threads = list(r.scalars().all())
+    team = None
+    overrides_by_thread = {}
+    if team_id:
+        r = await db.execute(select(Team).where(Team.id == team_id, Team.event_id == user.event_id))
+        team = r.scalar_one_or_none()
+        if team:
+            overrides_by_thread = (team.team_progress or {}).get("dialogue_overrides") or {}
+    return templates.TemplateResponse(
+        "admin/quest_control.html",
+        {
+            "request": request,
+            "user": user,
+            "teams": teams,
+            "threads": threads,
+            "team": team,
+            "overrides_by_thread": overrides_by_thread,
+        },
+    )
+
+
+@router.post("/quest-control")
+async def admin_quest_control_save(
+    team_id: int = Form(...),
+    thread_key: str = Form(...),
+    hold_until: str = Form(""),
+    force_reveal_ids: str = Form(""),
+    clear_hold: bool = Form(False),
+    clear_force: bool = Form(False),
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    from fastapi.responses import RedirectResponse
+    import json
+    r = await db.execute(select(Team).where(Team.id == team_id, Team.event_id == user.event_id))
+    team = r.scalar_one_or_none()
+    if not team:
+        return RedirectResponse(url="/admin/quest-control", status_code=303)
+    prog = dict(team.team_progress or {})
+    overrides = prog.get("dialogue_overrides") or {}
+    thr = overrides.get(thread_key) or {}
+    if clear_hold:
+        thr.pop("hold_until", None)
+    elif hold_until and hold_until.strip():
+        val = hold_until.strip()
+        if len(val) == 16 and "T" in val and "+" not in val and "Z" not in val:
+            val = val + ":00+00:00"
+        thr["hold_until"] = val
+    if clear_force:
+        thr.pop("force_reveal_message_ids", None)
+    elif force_reveal_ids.strip():
+        try:
+            ids = [int(x.strip()) for x in force_reveal_ids.replace(",", " ").split() if x.strip()]
+            thr["force_reveal_message_ids"] = ids
+        except ValueError:
+            pass
+    if thr:
+        overrides[thread_key] = thr
+    else:
+        overrides.pop(thread_key, None)
+    prog["dialogue_overrides"] = overrides
+    team.team_progress = prog
+    await db.flush()
+    return RedirectResponse(url=f"/admin/quest-control?team_id={team_id}", status_code=303)
+
+
 @router.get("/qr-items", response_class=HTMLResponse)
 async def admin_qr_items(
     request: Request,
@@ -890,10 +973,44 @@ async def admin_dialogue_edit(
     msgs = sorted(thread.messages, key=lambda m: m.order_index)
     r = await db.execute(select(Station).where(Station.event_id == user.event_id))
     stations = r.scalars().all()
+    import json
+    chars = (thread.config or {}).get("characters") or {}
+    characters_json = json.dumps(chars, ensure_ascii=False, indent=2) if chars else "{}"
     return templates.TemplateResponse(
         "admin/dialogue_edit.html",
-        {"request": request, "user": user, "thread": thread, "messages": msgs, "stations": stations},
+        {"request": request, "user": user, "thread": thread, "messages": msgs, "stations": stations, "characters_json": characters_json},
     )
+
+
+@router.post("/dialogues/{thread_id}/characters")
+async def admin_save_dialogue_characters(
+    thread_id: int,
+    characters_json: str = Form("{}"),
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    from fastapi.responses import RedirectResponse
+    import json
+    r = await db.execute(
+        select(DialogueThread).where(
+            DialogueThread.id == thread_id,
+            DialogueThread.event_id == user.event_id,
+        )
+    )
+    thread = r.scalar_one_or_none()
+    if not thread:
+        return RedirectResponse(url="/admin/dialogues", status_code=303)
+    try:
+        chars = json.loads(characters_json) if characters_json.strip() else {}
+        if not isinstance(chars, dict):
+            chars = {}
+        cfg = dict(thread.config or {})
+        cfg["characters"] = chars
+        thread.config = cfg
+        await db.flush()
+    except Exception:
+        pass
+    return RedirectResponse(url=f"/admin/dialogues/{thread_id}", status_code=303)
 
 
 @router.post("/dialogues/{thread_id}/messages")
@@ -906,7 +1023,9 @@ async def admin_add_message(
     scheduled_at: str = Form(""),
     station_id: str = Form(""),
     after_message_id: str = Form(""),
-    reply_options: str = Form(""),  # JSON: [{"text":"...", "next_message_id":N}]
+    reply_options: str = Form(""),  # JSON: [{"text":"...", "next_message_id":N, "delay_seconds":N}]
+    delay_after_previous: int = Form(0),
+    delete_after_seconds: int = Form(0),
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_admin),
 ):
@@ -929,7 +1048,12 @@ async def admin_add_message(
     )
     row = r.first()
     next_order = (row[0] + 1) if row else 0
-    payload = {"text": text, "character": character or ""}
+    char = (character or "").strip()
+    if char and not char.startswith("@"):
+        char = "@" + char
+    payload = {"text": text, "character": char}
+    if delete_after_seconds and delete_after_seconds > 0:
+        payload["delete_after_seconds"] = delete_after_seconds
     if reply_options.strip():
         try:
             opts = json.loads(reply_options)
@@ -937,6 +1061,8 @@ async def admin_add_message(
         except Exception:
             pass
     gate_rules = {"condition_type": condition_type}
+    if delay_after_previous and delay_after_previous > 0:
+        gate_rules["delay_after_previous_seconds"] = delay_after_previous
     if scheduled_at:
         gate_rules["scheduled_at"] = scheduled_at
     if station_id:

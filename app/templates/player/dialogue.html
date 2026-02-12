@@ -4,27 +4,122 @@
 {% block points %}{{ team.score_total if team else 0 }}{% endblock %}
 {% block content %}
 <style>
-    .chat-header { padding: 12px 16px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
-    .chat-messages { padding: 16px; min-height: 300px; }
-    .msg-bubble { max-width: 85%; margin-bottom: 12px; padding: 12px 16px; border-radius: 16px; font-size: 0.95rem; line-height: 1.4; }
-    .msg-bubble.in { background: var(--border); margin-right: auto; border-bottom-left-radius: 4px; }
-    .msg-bubble.out { background: var(--accent); color: #fff; margin-left: auto; border-bottom-right-radius: 4px; }
-    .msg-bubble .sender { font-size: 0.75rem; color: var(--muted); margin-bottom: 4px; }
-    .msg-bubble.out .sender { color: rgba(255,255,255,0.8); }
-    .quick-replies { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--border); }
-    .quick-reply { padding: 10px 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; font-size: 0.9rem; cursor: pointer; font-family: inherit; }
+    .chat-header {
+        padding: 14px 16px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .chat-header-back {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--accent);
+        text-decoration: none;
+        font-size: 1.3rem;
+        border-radius: 50%;
+    }
+    .chat-header-back:active { background: var(--border); }
+    .chat-header-title { flex: 1; margin: 0; font-size: 1rem; font-weight: 600; }
+    .chat-messages {
+        padding: 16px 12px 24px;
+        min-height: 300px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .msg-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+        max-width: 90%;
+    }
+    .msg-row.in { align-self: flex-start; }
+    .msg-row.out { align-self: flex-end; flex-direction: row-reverse; margin-left: auto; }
+    .msg-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background: linear-gradient(135deg, var(--accent), #7c3aed);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 0.9rem;
+        overflow: hidden;
+    }
+    .msg-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .msg-row.out .msg-avatar { background: linear-gradient(135deg, #4a7c59, #2d5a3d); }
+    .msg-bubble {
+        padding: 10px 14px;
+        border-radius: 18px;
+        font-size: 0.95rem;
+        line-height: 1.4;
+        position: relative;
+    }
+    .msg-row.in .msg-bubble {
+        background: var(--border);
+        border-bottom-left-radius: 4px;
+    }
+    .msg-row.out .msg-bubble {
+        background: var(--accent);
+        color: #fff;
+        border-bottom-right-radius: 4px;
+    }
+    .msg-bubble .sender {
+        font-size: 0.72rem;
+        color: var(--muted);
+        margin-bottom: 4px;
+    }
+    .msg-row.out .msg-bubble .sender { color: rgba(255,255,255,0.85); }
+    .msg-delayed { opacity: 0; }
+    .msg-deleting { animation: msgDelete 0.4s ease forwards; }
+    @keyframes msgDelete { to { opacity: 0; max-height: 0; padding: 0; margin: 0; overflow: hidden; } }
+    @keyframes fadeInMsg { to { opacity: 1; } }
+    .quick-replies {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 12px 16px;
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+        position: sticky;
+        bottom: 0;
+    }
+    .quick-reply {
+        padding: 10px 16px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        font-size: 0.9rem;
+        cursor: pointer;
+        font-family: inherit;
+    }
     .quick-reply:hover { background: var(--border); }
-    .back-link { display: inline-block; padding: 8px 0; color: var(--accent); text-decoration: none; font-size: 0.9rem; }
 </style>
 <div class="chat-header">
-    <a href="/player" class="back-link">← Назад</a>
-    <h2 style="margin: 8px 0 0; font-size: 1.1rem;">{{ thread.title or thread.key }}</h2>
+    <a href="/player" class="chat-header-back" aria-label="Назад">←</a>
+    <h2 class="chat-header-title">{{ thread.title or thread.key }}</h2>
 </div>
 <div class="chat-messages" id="dialogue-messages">
-    {% for m in messages %}
-    <div class="msg-bubble in">
-        {% if m.payload.get('character') %}<div class="sender">{{ m.payload.character }}</div>{% endif %}
-        {{ m.payload.get('text', m.payload) }}
+    {% for e in messages_enriched %}
+    {% set m = e.msg %}
+    {% set char_name = m.payload.get('character') or '—' %}
+    {% set avatar_url = (characters.get(char_name) or {}).get('avatar') %}
+    <div class="msg-row in {% if e.show_delay_seconds > 0 %}msg-delayed{% endif %}" data-msg-id="{{ m.id }}" data-show-delay="{{ e.show_delay_seconds }}" data-delete-after="{{ e.delete_after_seconds }}">
+        <div class="msg-avatar">{% if avatar_url %}<img src="{{ avatar_url }}" alt="">{% else %}{{ char_name[1:2] if char_name.startswith('@') else char_name[:1] }}{% endif %}</div>
+        <div class="msg-bubble">
+            {% if char_name %}<div class="sender">{{ char_name }}</div>{% endif %}
+            {{ m.payload.get('text', m.payload) }}
+        </div>
     </div>
     {% endfor %}
 </div>
@@ -54,4 +149,56 @@
     {% endif %}
 </div>
 {% endif %}
+<script>
+function initDeleteTimers(container) {
+    var c = container || document.getElementById('dialogue-messages');
+    if (!c) return;
+    c.querySelectorAll('.msg-row[data-delete-after]').forEach(function(el){
+        if (el._deleteTimerSet) return;
+        el._deleteTimerSet = true;
+        var delAfter = parseInt(el.dataset.deleteAfter || 0, 10);
+        if (delAfter <= 0) return;
+        var delaySec = 0;
+        var wrapper = el.closest('.msg-delayed');
+        if (wrapper && wrapper.dataset.delaySeconds) delaySec = parseInt(wrapper.dataset.delaySeconds || 0, 10);
+        setTimeout(function(){
+            el.classList.add('msg-deleting');
+            setTimeout(function(){ if(el.parentNode) el.remove(); }, 400);
+        }, (delaySec + delAfter) * 1000);
+    });
+}
+(function(){
+    function initMsg(el){
+        var delAfter = parseInt(el.dataset.deleteAfter || 0, 10);
+        if (delAfter > 0) {
+            setTimeout(function(){
+                el.classList.add('msg-deleting');
+                setTimeout(function(){ if(el.parentNode) el.remove(); }, 400);
+            }, delAfter * 1000);
+        }
+    }
+    var msgs = document.querySelectorAll('#dialogue-messages .msg-row');
+    var byDelay = {};
+    msgs.forEach(function(el){
+        var d = parseInt(el.dataset.showDelay || 0, 10);
+        if (!byDelay[d]) byDelay[d] = [];
+        byDelay[d].push(el);
+    });
+    var delays = Object.keys(byDelay).map(Number).sort(function(a,b){return a-b;});
+    delays.forEach(function(d){
+        setTimeout(function(){
+            byDelay[d].forEach(function(el){
+                el.classList.remove('msg-delayed');
+                el.style.animation = 'fadeInMsg 0.3s ease forwards';
+                initMsg(el);
+            });
+        }, d * 1000);
+    });
+})();
+document.body.addEventListener('htmx:afterSwap', function(ev){
+    if (ev.detail.target.id === 'dialogue-messages' || ev.detail.target.closest('#dialogue-messages')) {
+        initDeleteTimers(document.getElementById('dialogue-messages'));
+    }
+});
+</script>
 {% endblock %}
