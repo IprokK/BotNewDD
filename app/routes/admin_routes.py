@@ -687,9 +687,39 @@ async def admin_send_wave_message_page(
             seen.add(tg_id)
             recipients.append({"tg_id": tg_id, "name": name, "team_id": None})
     recipients.sort(key=lambda x: (x["name"] or "").lower())
+
+    # Участники по выбранному времени
+    r = await db.execute(
+        select(RegistrationForm.tg_id, RegistrationForm.full_name, RegistrationForm.wave_preference).where(
+            RegistrationForm.event_id == user.event_id,
+        )
+    )
+    wave_by_tg = {}
+    for row in r.all():
+        wave_by_tg[row[0]] = {"name": row[1], "wave": row[2]}
+    r = await db.execute(
+        select(Player.tg_id, Player.player_progress).where(Player.event_id == user.event_id)
+    )
+    for tg_id, prog in r.all():
+        if not tg_id:
+            continue
+        wave = (prog or {}).get("wave_preference") if prog else None
+        if tg_id not in wave_by_tg:
+            wave_by_tg[tg_id] = {"name": forms_only.get(tg_id) or f"tg:{tg_id}", "wave": wave}
+        elif not wave_by_tg[tg_id]["wave"] and wave:
+            wave_by_tg[tg_id]["wave"] = wave
+    by_wave = {"13:00": [], "15:00": [], "17:10": [], "В перерывах между парами": [], "no_choice": []}
+    for tg_id, data in wave_by_tg.items():
+        wave = data["wave"]
+        name = data["name"]
+        if wave in by_wave:
+            by_wave[wave].append({"name": name})
+        else:
+            by_wave["no_choice"].append({"name": name})
+
     return templates.TemplateResponse(
         "admin/send_wave_message.html",
-        {"request": request, "user": user, "recipients": recipients},
+        {"request": request, "user": user, "recipients": recipients, "by_wave": by_wave},
     )
 
 

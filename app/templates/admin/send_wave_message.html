@@ -2,7 +2,7 @@
 {% block title %}Волны запуска{% endblock %}
 {% block content %}
 <h2>📤 Сообщение о выборе волны</h2>
-<p style="color:var(--admin-muted);">Отправит в Telegram сообщение с предложением выбрать время: 13:00, 15:00, 17:00 или «В перерывах между парами». Ответ сохранится в анкете.</p>
+<p style="color:var(--admin-muted);">Отправит в Telegram сообщение с предложением выбрать время: 13:00, 15:00, 17:10 или «В перерывах между парами». Ответ сохранится в анкете.</p>
 
 {% if request.query_params.get('sent') == 'ok' %}
 <div style="padding:12px;background:var(--admin-success);color:#fff;border-radius:8px;margin-bottom:16px;">✅ Сообщение отправлено</div>
@@ -33,6 +33,32 @@
     {% else %}
     <p style="color:var(--admin-muted);">Нет получателей (добавьте игроков или заявки)</p>
     {% endfor %}
+</div>
+
+<div class="card" style="margin-top:24px;">
+    <h3>Участники по времени</h3>
+    {% for slot in ["13:00", "15:00", "17:10", "В перерывах между парами"] %}
+    <div style="margin-bottom:16px;">
+        <h4 style="margin:0 0 8px;font-size:0.95rem;color:var(--admin-accent);">{{ slot }} — {{ by_wave[slot]|length }} чел.</h4>
+        {% if by_wave[slot] %}
+        <ul style="margin:0;padding-left:20px;color:var(--admin-text);">
+            {% for p in by_wave[slot] %}<li>{{ p.name }}</li>{% endfor %}
+        </ul>
+        {% else %}
+        <p style="margin:0;color:var(--admin-muted);font-size:0.9rem;">Пока никого</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+    <div style="margin-bottom:0;">
+        <h4 style="margin:0 0 8px;font-size:0.95rem;color:var(--admin-muted);">Ещё не выбрали — {{ by_wave.no_choice|length }} чел.</h4>
+        {% if by_wave.no_choice %}
+        <ul style="margin:0;padding-left:20px;color:var(--admin-text);">
+            {% for p in by_wave.no_choice %}<li>{{ p.name }}</li>{% endfor %}
+        </ul>
+        {% else %}
+        <p style="margin:0;color:var(--admin-muted);font-size:0.9rem;">Все выбрали</p>
+        {% endif %}
+    </div>
 </div>
 
 {% endblock %}
