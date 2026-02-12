@@ -96,6 +96,14 @@ async def player_dashboard(
     player_role = (player.role or "A").replace("ROLE_", "") if player else "—"
     inventory = list((player.player_progress or {}).get("inventory") or [])
 
+    # Все станции и посещённые — для маршрутного листа
+    r = await db.execute(
+        select(Station).where(Station.event_id == user.event_id).order_by(Station.name)
+    )
+    all_stations = r.scalars().all()
+    visited_station_ids = {v.station_id for v, s in finished_visits}
+    current_station_id = station.id if station else None
+
     # Соседи по команде (напарники) — для ссылки «Написать в Telegram»
     teammates = []
     if user.team_id:
@@ -120,6 +128,9 @@ async def player_dashboard(
             "player_role": player_role,
             "teammates": teammates,
             "inventory": inventory,
+            "all_stations": all_stations,
+            "visited_station_ids": visited_station_ids,
+            "current_station_id": current_station_id,
         },
     )
 

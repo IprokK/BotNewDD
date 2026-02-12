@@ -1,4 +1,19 @@
 {% extends "player/base_app.html" %}
+{% block head %}
+<style>
+    .route-list { display: flex; flex-direction: column; gap: 0; }
+    .route-item { display: flex; gap: 14px; padding: 14px 16px; background: var(--surface); border-radius: var(--radius); margin-bottom: 10px; box-shadow: var(--shadow); border-left: 4px solid var(--border); align-items: flex-start; }
+    .route-item.route-done { border-left-color: var(--success); opacity: 0.85; }
+    .route-item.route-current { border-left-color: var(--accent); background: linear-gradient(135deg, rgba(196,92,38,0.08), var(--surface)); }
+    .route-num { width: 28px; height: 28px; min-width: 28px; border-radius: 50%; background: var(--border); color: var(--muted); display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 600; }
+    .route-done .route-num { background: var(--success); color: #fff; }
+    .route-current .route-num { background: var(--accent); color: #fff; }
+    .route-content { flex: 1; min-width: 0; }
+    .route-name { font-weight: 600; font-size: 1rem; margin-bottom: 2px; }
+    .route-addr { font-size: 0.85rem; color: var(--muted); margin-top: 4px; }
+    .route-hint { font-size: 0.8rem; color: var(--accent); margin-top: 6px; }
+</style>
+{% endblock %}
 {% block team_name %}{{ team.name if team else '—' }}{% endblock %}
 {% block player_role %}{{ player_role }}{% endblock %}
 {% block points %}{{ team.score_total if team else 0 }}{% endblock %}
@@ -47,12 +62,31 @@
 
 <!-- Screen 2: Квест -->
 <div class="screen" id="screen-quest">
-    <h2 style="margin:0 0 16px;font-size:1.25rem;">Квест</h2>
-    <div style="background:var(--surface);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);margin-bottom:16px;">
-        <h3 style="margin:0 0 12px;font-size:0.95rem;color:var(--muted);">Главная цель</h3>
-        <p style="margin:0;">{% if station %}Направиться на станцию «{{ station.name }}»{% else %}Следуйте подсказкам и исследуйте локации{% endif %}</p>
+    <h2 style="margin:0 0 16px;font-size:1.25rem;">Маршрутный лист</h2>
+    {% if all_stations %}
+    <div class="route-list">
+        {% for s in all_stations %}
+        <div class="route-item {% if s.id in visited_station_ids %}route-done{% endif %} {% if s.id == current_station_id %}route-current{% endif %}">
+            <div class="route-num">{{ loop.index }}</div>
+            <div class="route-content">
+                <div class="route-name">
+                    {% if s.id in visited_station_ids %}✅{% elif s.id == current_station_id %}📍{% else %}○{% endif %}
+                    {{ s.name }}
+                </div>
+                {% if (s.config or {}).get('address') %}
+                <div class="route-addr">{{ (s.config or {}).get('address') }}</div>
+                {% endif %}
+                {% if s.id == current_station_id and team and team.current_state in ('assigned', 'in_visit') %}
+                <div class="route-hint">Покажите QR ведущему при прибытии</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
     </div>
-    <h3 style="margin:0 0 12px;font-size:0.95rem;">Улики и подсказки</h3>
+    {% else %}
+    <p style="color:var(--muted);">Станции пока не добавлены</p>
+    {% endif %}
+    <h3 style="margin:24px 0 12px;font-size:0.95rem;color:var(--muted);">Улики и подсказки</h3>
     {% for block, delivery in deliveries %}
     <div style="background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:8px;box-shadow:var(--shadow);border-left:4px solid var(--accent);">
         <strong>{{ block.key }}</strong>
