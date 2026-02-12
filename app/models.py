@@ -323,6 +323,7 @@ class RegistrationForm(Base):
     character_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     photo_file_id: Mapped[str | None] = mapped_column(String(255), nullable=True)  # Telegram file_id
+    wave_preference: Mapped[str | None] = mapped_column(String(100), nullable=True)  # 13:00, 15:00, 17:00, В перерывах между парами
     privacy_consent: Mapped[bool] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

@@ -32,7 +32,7 @@ from app.models import (
     TeamState,
 )
 from app.services import generate_qr_token, log_event, ws_manager
-from app.notify import notify_player_assigned, notify_station_assigned
+from app.notify import notify_player_assigned, notify_station_assigned, send_wave_message
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 templates = Jinja2Templates(directory="app/templates")
@@ -651,6 +651,75 @@ async def admin_registration_cancel(
         await db.commit()
         await notify_registration_cancelled(tg_id)
     return RedirectResponse(url="/admin/registrations", status_code=303)
+
+
+@router.get("/send-wave-message", response_class=HTMLResponse)
+async def admin_send_wave_message_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    """Страница рассылки сообщения о выборе волны запуска."""
+    # Все получатели: игроки + заявки (уникальные tg_id)
+    r = await db.execute(
+        select(Player.tg_id, Player.team_id, RegistrationForm.full_name)
+        .outerjoin(
+            RegistrationForm,
+            (RegistrationForm.event_id == Player.event_id) & (RegistrationForm.tg_id == Player.tg_id),
+        )
+        .where(Player.event_id == user.event_id)
+    )
+    players = r.all()
+    r = await db.execute(
+        select(RegistrationForm.tg_id, RegistrationForm.full_name).where(
+            RegistrationForm.event_id == user.event_id,
+        )
+    )
+    forms_only = {row[0]: row[1] for row in r.all()}
+    recipients = []
+    seen = set()
+    for tg_id, team_id, name in players:
+        if tg_id and tg_id not in seen:
+            seen.add(tg_id)
+            recipients.append({"tg_id": tg_id, "name": name or forms_only.get(tg_id) or f"tg:{tg_id}", "team_id": team_id})
+    for tg_id, name in forms_only.items():
+        if tg_id not in seen:
+            seen.add(tg_id)
+            recipients.append({"tg_id": tg_id, "name": name, "team_id": None})
+    recipients.sort(key=lambda x: (x["name"] or "").lower())
+    return templates.TemplateResponse(
+        "admin/send_wave_message.html",
+        {"request": request, "user": user, "recipients": recipients},
+    )
+
+
+@router.post("/send-wave-message")
+async def admin_send_wave_message(
+    tg_id: int = Form(None),
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    import asyncio
+    from fastapi.responses import RedirectResponse
+
+    if tg_id:
+        ok = await send_wave_message(tg_id)
+        return RedirectResponse(url=f"/admin/send-wave-message?sent={'ok' if ok else 'err'}&tg_id={tg_id}", status_code=303)
+    # Отправить всем
+    r = await db.execute(
+        select(Player.tg_id).where(Player.event_id == user.event_id).distinct()
+    )
+    player_ids = {row[0] for row in r.all()}
+    r = await db.execute(
+        select(RegistrationForm.tg_id).where(RegistrationForm.event_id == user.event_id).distinct()
+    )
+    form_ids = {row[0] for row in r.all()}
+    all_ids = player_ids | form_ids
+    sent = 0
+    for uid in all_ids:
+        if uid and await send_wave_message(uid):
+            sent += 1
+    return RedirectResponse(url=f"/admin/send-wave-message?sent_all={sent}&total={len(all_ids)}", status_code=303)
 
 
 @router.get("/team-chats", response_class=HTMLResponse)

@@ -1,0 +1,38 @@
+{% extends "admin/base.html" %}
+{% block title %}Волны запуска{% endblock %}
+{% block content %}
+<h2>📤 Сообщение о выборе волны</h2>
+<p style="color:var(--admin-muted);">Отправит в Telegram сообщение с предложением выбрать время: 13:00, 15:00, 17:00 или «В перерывах между парами». Ответ сохранится в анкете.</p>
+
+{% if request.query_params.get('sent') == 'ok' %}
+<div style="padding:12px;background:var(--admin-success);color:#fff;border-radius:8px;margin-bottom:16px;">✅ Сообщение отправлено</div>
+{% elif request.query_params.get('sent') == 'err' %}
+<div style="padding:12px;background:var(--admin-warning);color:#fff;border-radius:8px;margin-bottom:16px;">⚠️ Ошибка отправки</div>
+{% elif request.query_params.get('sent_all') is not none %}
+<div style="padding:12px;background:var(--admin-success);color:#fff;border-radius:8px;margin-bottom:16px;">✅ Отправлено {{ request.query_params.get('sent_all') }} из {{ request.query_params.get('total') }}</div>
+{% endif %}
+
+<div class="card" style="margin-bottom:20px;">
+    <h3>Отправить всем</h3>
+    <form method="post" action="/admin/send-wave-message" onsubmit="return confirm('Отправить сообщение всем участникам?');">
+        <button type="submit">📤 Отправить всем ({{ recipients|length }})</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Отправить отдельно</h3>
+    {% for r in recipients %}
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--admin-border);">
+        <span style="flex:1;">{{ r.name }}</span>
+        <span style="color:var(--admin-muted);font-size:0.85rem;">tg:{{ r.tg_id }}{% if r.team_id %} · в команде{% else %} · ожидает{% endif %}</span>
+        <form method="post" action="/admin/send-wave-message" style="margin:0;">
+            <input type="hidden" name="tg_id" value="{{ r.tg_id }}">
+            <button type="submit" style="padding:4px 12px;font-size:0.9rem;">Отправить</button>
+        </form>
+    </div>
+    {% else %}
+    <p style="color:var(--admin-muted);">Нет получателей (добавьте игроков или заявки)</p>
+    {% endfor %}
+</div>
+
+{% endblock %}

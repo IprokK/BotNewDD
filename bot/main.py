@@ -146,6 +146,45 @@ async def cmd_register(message: Message, state: FSMContext):
     await register(message, state)  # reuse same logic as button
 
 
+# --- Выбор волны запуска (ответ на рассылку из админки) ---
+WAVE_OPTIONS = ("13:00", "15:00", "17:00", "В перерывах между парами")
+
+
+@dp.message(F.text.in_(WAVE_OPTIONS))
+async def wave_preference_reply(message: Message):
+    """Сохранение выбора времени волны в анкету."""
+    tg_id = message.from_user.id
+    choice = message.text
+    async with async_session_maker() as db:
+        r = await db.execute(
+            select(RegistrationForm).where(
+                RegistrationForm.event_id == CURRENT_EVENT_ID,
+                RegistrationForm.tg_id == tg_id,
+            )
+        )
+        form = r.scalar_one_or_none()
+        if form:
+            form.wave_preference = choice
+            await db.commit()
+            await message.answer(f"✅ Записано: {choice}", reply_markup=main_kb())
+            return
+        r = await db.execute(
+            select(Player).where(
+                Player.event_id == CURRENT_EVENT_ID,
+                Player.tg_id == tg_id,
+            )
+        )
+        player = r.scalar_one_or_none()
+        if player:
+            prog = dict(player.player_progress or {})
+            prog["wave_preference"] = choice
+            player.player_progress = prog
+            await db.commit()
+            await message.answer(f"✅ Записано: {choice}", reply_markup=main_kb())
+            return
+    await message.answer("Выбор сохранён.", reply_markup=main_kb())
+
+
 async def main():
     await dp.start_polling(bot)
 
