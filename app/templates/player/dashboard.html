@@ -102,16 +102,30 @@
     {% endfor %}
 </div>
 
-<!-- Screen 3: Чаты -->
+<!-- Screen 3: Чаты (Telegram-style) -->
 <div class="screen" id="screen-chats">
     <h2 style="margin:0 0 16px;font-size:1.25rem;">Чаты</h2>
+    {% if teammate_info %}
+    <a href="#" onclick="openItem('phone'); document.querySelector('.chat-item[data-open=partner]').click(); return false;" style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface);border-radius:var(--radius);margin-bottom:10px;box-shadow:var(--shadow);text-decoration:none;color:inherit;">
+        <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.1rem;font-weight:600;flex-shrink:0;">{{ teammate_info.name[:1]|upper }}</div>
+        <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:1rem;">{{ teammate_info.name }}</div>
+            <div style="font-size:0.85rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{% if teammate_info.preview %}{{ teammate_info.preview }}{% else %}Чат с напарником{% endif %}</div>
+        </div>
+        <div style="font-size:0.75rem;color:var(--muted);flex-shrink:0;">{% if teammate_info.time %}{{ teammate_info.time.strftime('%H:%M') }}{% endif %}</div>
+    </a>
+    {% endif %}
     {% for t in threads %}
-    <a href="/player/dialogues/{{ t.key }}" style="display:block;background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:8px;box-shadow:var(--shadow);text-decoration:none;color:inherit;">
-        <strong>{{ t.title or t.key }}</strong>
-        <span style="color:var(--muted);font-size:0.85rem;"> — {{ t.type }}</span>
+    <a href="/player/dialogues/{{ t.key }}" style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface);border-radius:var(--radius);margin-bottom:10px;box-shadow:var(--shadow);text-decoration:none;color:inherit;">
+        <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.1rem;font-weight:600;flex-shrink:0;overflow:hidden;">{% if t.avatar_url %}<img src="{{ t.avatar_url }}" alt="" style="width:100%;height:100%;object-fit:cover;">{% else %}{{ (t.title or t.key)[:1]|upper }}{% endif %}</div>
+        <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:1rem;">{{ t.title or t.key }}</div>
+            <div style="font-size:0.85rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{% if t.preview %}{{ t.preview }}{% else %}Диалог{% endif %}</div>
+        </div>
+        <div style="font-size:0.75rem;color:var(--muted);flex-shrink:0;">›</div>
     </a>
     {% else %}
-    <p style="color:var(--muted);">Нет диалогов</p>
+    {% if not teammate_info %}<p style="color:var(--muted);text-align:center;padding:24px;">Нет чатов</p>{% endif %}
     {% endfor %}
 </div>
 
@@ -147,31 +161,64 @@
 </div>
 
 <!-- Item overlays (phone, diary, etc.) - shown when item tapped -->
-<div id="item-phone" class="screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--surface);z-index:200;display:none;overflow-y:auto;">
-    <div style="padding:16px;padding-top:50px;">
-        <button onclick="closeItem()" style="margin-bottom:16px;padding:8px 16px;background:var(--border);border:none;border-radius:var(--radius-sm);cursor:pointer;">← Назад</button>
-        <h2 style="margin:0 0 16px;">📱 Ваш телефон</h2>
-        <div style="display:flex;gap:8px;margin-bottom:20px;overflow-x:auto;padding-bottom:8px;">
-            <button class="phone-tab active" data-tab="chats">Чаты</button>
-            <button class="phone-tab" data-tab="partner">Напарник</button>
-            <button class="phone-tab" data-tab="scanner">Сканер</button>
-        </div>
-        <div id="phone-chats" class="phone-panel">
+<div id="item-phone" class="screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:200;display:none;overflow:hidden;flex-direction:column;flex-wrap:nowrap;">
+    <div class="phone-header" style="padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;">
+        <button onclick="closeItem()" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;border-radius:50%;cursor:pointer;font-size:1.2rem;color:var(--accent);">←</button>
+        <h2 style="margin:0;font-size:1.1rem;">Ваш телефон</h2>
+    </div>
+    <!-- Chat list (Telegram style) -->
+    <div id="phone-chat-list" class="phone-view" style="flex:1;overflow-y:auto;">
+        <div class="chat-list" style="padding:0;">
+            {% if teammate_info %}
+            <a href="#" class="chat-item" data-open="partner" style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface);border-bottom:1px solid var(--border);text-decoration:none;color:inherit;">
+                <div class="chat-avatar" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.1rem;font-weight:600;flex-shrink:0;">{{ teammate_info.name[:1]|upper }}</div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:600;font-size:1rem;">{{ teammate_info.name }}</div>
+                    <div style="font-size:0.85rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{% if teammate_info.preview %}{{ teammate_info.preview }}{% else %}Чат с напарником{% endif %}</div>
+                </div>
+                <div style="font-size:0.75rem;color:var(--muted);flex-shrink:0;">{% if teammate_info.time %}{{ teammate_info.time.strftime('%H:%M') }}{% endif %}</div>
+            </a>
+            {% endif %}
             {% for t in threads %}
-            <a href="/player/dialogues/{{ t.key }}" style="display:block;padding:14px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:8px;text-decoration:none;color:inherit;">{{ t.title or t.key }}</a>
-            {% else %}<p style="color:var(--muted);">Нет чатов</p>{% endfor %}
-        </div>
-        <div id="phone-partner" class="phone-panel" style="display:none;">
-            {% if teammates %}
-            <p style="font-size:0.9rem;color:var(--muted);margin-bottom:12px;">Чат с напарником — сообщения идут через сервер</p>
-            <div id="team-chat-container" hx-get="/player/team-chat" hx-trigger="load, every 5s" hx-swap="innerHTML">
-                <p style="color:var(--muted);">Загрузка…</p>
-            </div>
-            {% else %}
-            <p style="color:var(--muted);">Пока нет напарника в команде</p>
+            <a href="/player/dialogues/{{ t.key }}" class="chat-item" style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface);border-bottom:1px solid var(--border);text-decoration:none;color:inherit;">
+                <div class="chat-avatar" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.1rem;font-weight:600;flex-shrink:0;overflow:hidden;">{% if t.avatar_url %}<img src="{{ t.avatar_url }}" alt="" style="width:100%;height:100%;object-fit:cover;">{% else %}{{ (t.title or t.key)[:1]|upper }}{% endif %}</div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:600;font-size:1rem;">{{ t.title or t.key }}</div>
+                    <div style="font-size:0.85rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{% if t.preview %}{{ t.preview }}{% else %}Диалог{% endif %}</div>
+                </div>
+                <div style="font-size:0.75rem;color:var(--muted);flex-shrink:0;">›</div>
+            </a>
+            {% endfor %}
+            <a href="#" class="chat-item" data-open="scanner" style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface);border-bottom:1px solid var(--border);text-decoration:none;color:inherit;">
+                <div class="chat-avatar" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#4a7c59,#2d5a3d);display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.5rem;flex-shrink:0;">📷</div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:600;font-size:1rem;">Сканер</div>
+                    <div style="font-size:0.85rem;color:var(--muted);">Сканировать QR и штрихкоды</div>
+                </div>
+                <div style="font-size:1rem;color:var(--muted);flex-shrink:0;">›</div>
+            </a>
+            {% if not teammate_info and not threads %}
+            <div style="padding:24px;text-align:center;color:var(--muted);">Нет чатов</div>
             {% endif %}
         </div>
-        <div id="phone-scanner" class="phone-panel" style="display:none;">
+    </div>
+    <!-- Team chat view (inline) -->
+    <div id="phone-partner" class="phone-view" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+        <div style="padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;">
+            <button onclick="phoneShowList()" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;border-radius:50%;cursor:pointer;font-size:1.2rem;color:var(--accent);">←</button>
+            <h2 style="margin:0;font-size:1rem;">{{ teammate_info.name if teammate_info else 'Напарник' }}</h2>
+        </div>
+        <div id="team-chat-container" style="flex:1;overflow-y:auto;padding:16px;" hx-get="/player/team-chat" hx-trigger="load, every 5s" hx-swap="innerHTML">
+            <p style="color:var(--muted);">Загрузка…</p>
+        </div>
+    </div>
+    <!-- Scanner view (inline) -->
+    <div id="phone-scanner" class="phone-view" style="display:none;flex:1;flex-direction:column;overflow-y:auto;">
+        <div style="padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;">
+            <button onclick="phoneShowList()" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;border-radius:50%;cursor:pointer;font-size:1.2rem;color:var(--accent);">←</button>
+            <h2 style="margin:0;font-size:1rem;">Сканер</h2>
+        </div>
+        <div style="padding:16px;">
             <button onclick="startScanner()" style="width:100%;padding:16px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;font-size:1rem;">📷 Сканировать QR / штрихкод</button>
             <div id="scan-result" style="margin-top:16px;"></div>
         </div>
@@ -235,17 +282,27 @@
             if (screen) screen.classList.add('active');
         });
     });
-    document.querySelectorAll('.phone-tab').forEach(t => {
-        t.addEventListener('click', function() {
-            document.querySelectorAll('.phone-tab').forEach(x => x.classList.remove('active'));
-            this.classList.add('active');
-            document.querySelectorAll('.phone-panel').forEach(p => p.style.display = 'none');
-            const p = document.getElementById('phone-' + this.dataset.tab);
-            if (p) p.style.display = 'block';
+    window.phoneShowList = function() {
+        document.getElementById('phone-chat-list').style.display = 'block';
+        document.getElementById('phone-partner').style.display = 'none';
+        document.getElementById('phone-scanner').style.display = 'none';
+    };
+    document.querySelectorAll('.chat-item[data-open]').forEach(el => {
+        el.addEventListener('click', function(e) {
+            e.preventDefault();
+            const view = this.dataset.open;
+            document.getElementById('phone-chat-list').style.display = 'none';
+            document.getElementById('phone-partner').style.display = view === 'partner' ? 'flex' : 'none';
+            document.getElementById('phone-scanner').style.display = view === 'scanner' ? 'flex' : 'none';
+            if (view === 'partner' && typeof htmx !== 'undefined') {
+                htmx.ajax('get', '/player/team-chat', {target: '#team-chat-container', swap: 'innerHTML'});
+            }
+            if (view === 'scanner') setTimeout(() => startScanner(), 100);
         });
     });
     window.openItem = function(id) {
-        document.getElementById('item-' + id).style.display = 'block';
+        const el = document.getElementById('item-' + id);
+        el.style.display = (id === 'phone') ? 'flex' : 'block';
     };
     let playerQrScanner = null;
     window.closeItem = function() {

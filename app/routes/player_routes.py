@@ -66,11 +66,21 @@ async def player_dashboard(
     )
     deliveries = r.all()
 
-    # Dialogue threads available
+    # Dialogue threads available (with preview and avatar)
     r = await db.execute(
-        select(DialogueThread).where(DialogueThread.event_id == user.event_id)
+        select(DialogueThread)
+        .options(selectinload(DialogueThread.messages))
+        .where(DialogueThread.event_id == user.event_id)
     )
-    threads = r.scalars().all()
+    threads = list(r.scalars().all())
+    for t in threads:
+        ms_sorted = sorted(t.messages, key=lambda x: x.order_index)
+        first = next((m for m in ms_sorted if (m.payload or {}).get("text")), None)
+        txt = (first.payload or {}).get("text", "") if first else ""
+        t.preview = (txt[:60] + "…") if len(txt) > 60 else (txt or "")
+        chars = (t.config or {}).get("characters") or {}
+        char_name = (first.payload or {}).get("character") if first else None
+        t.avatar_url = (chars.get(char_name) or {}).get("avatar") if char_name else None
 
     # Визиты, по которым ещё не оценено (для формы рейтинга)
     r = await db.execute(
@@ -104,8 +114,8 @@ async def player_dashboard(
     visited_station_ids = {v.station_id for v, s in finished_visits}
     current_station_id = station.id if station else None
 
-    # Соседи по команде (напарники) — для ссылки «Написать в Telegram»
-    teammates = []
+    # Соседи по команде (напарники) — имена и последнее сообщение
+    teammate_info = None  # {name, preview, time, player_id}
     if user.team_id:
         r = await db.execute(
             select(Player).where(
@@ -114,6 +124,35 @@ async def player_dashboard(
             )
         )
         teammates = list(r.scalars().all())
+        if teammates:
+            p = teammates[0]
+            rf = await db.execute(
+                select(RegistrationForm.full_name).where(
+                    RegistrationForm.event_id == user.event_id,
+                    RegistrationForm.tg_id == p.tg_id,
+                )
+            )
+            row = rf.first()
+            name = row[0] if row else f"Участник {p.id}"
+            last_msg = None
+            r = await db.execute(
+                select(TeamChatMessage)
+                .where(
+                    TeamChatMessage.team_id == user.team_id,
+                    TeamChatMessage.event_id == user.event_id,
+                )
+                .order_by(TeamChatMessage.created_at.desc())
+                .limit(1)
+            )
+            last_msg = r.scalar_one_or_none()
+            preview = ""
+            msg_time = None
+            if last_msg:
+                preview = (last_msg.text[:50] + "…") if len(last_msg.text) > 50 else last_msg.text
+                msg_time = last_msg.created_at
+            teammate_info = {"name": name, "preview": preview, "time": msg_time, "player_id": p.id}
+    else:
+        teammates = []
 
     return templates.TemplateResponse(
         "player/dashboard.html",
@@ -127,6 +166,7 @@ async def player_dashboard(
             "pending_ratings": pending_ratings,
             "player_role": player_role,
             "teammates": teammates,
+            "teammate_info": teammate_info,
             "inventory": inventory,
             "all_stations": all_stations,
             "visited_station_ids": visited_station_ids,
