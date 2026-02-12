@@ -300,6 +300,7 @@ async def admin_station_hosts(
 async def admin_add_station_host(
     tg_id: int = Form(...),
     station_id: int = Form(...),
+    name: str = Form(""),
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_admin),
 ):
@@ -316,8 +317,14 @@ async def admin_add_station_host(
     existing = r.scalar_one_or_none()
     if existing:
         existing.station_id = station_id
+        existing.name = (name or "").strip() or None
     else:
-        host = StationHost(event_id=user.event_id, tg_id=tg_id, station_id=station_id)
+        host = StationHost(
+            event_id=user.event_id,
+            tg_id=tg_id,
+            station_id=station_id,
+            name=(name or "").strip() or None,
+        )
         db.add(host)
     await db.commit()
     return RedirectResponse(url="/admin/station-hosts", status_code=303)

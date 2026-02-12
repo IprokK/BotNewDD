@@ -159,6 +159,7 @@ class StationHost(Base):
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), nullable=False)
     tg_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     station_id: Mapped[int] = mapped_column(ForeignKey("stations.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (UniqueConstraint("event_id", "tg_id", name="uq_station_hosts_event_tg"),)

@@ -1,5 +1,6 @@
 {% extends "station/base_host.html" %}
 {% block title %}Станция{% endblock %}
+{% block host_name %}{{ host_name }}{% endblock %}
 {% block station_name %}{{ default_station.name if default_station else 'Станция' }}{% endblock %}
 {% block head %}
 <style>

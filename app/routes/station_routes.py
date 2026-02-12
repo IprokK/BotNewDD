@@ -26,6 +26,14 @@ async def station_ui(
 ):
     """Station Host UI: выбор станции, сканер QR, оценка. Ведущие могут подменять друг друга."""
     r = await db.execute(
+        select(StationHost).where(
+            StationHost.event_id == user.event_id,
+            StationHost.tg_id == user.tg_id,
+        )
+    )
+    host_record = r.scalar_one_or_none()
+    host_name = host_record.name if host_record and host_record.name else f"tg:{user.tg_id}"
+    r = await db.execute(
         select(Station).where(Station.event_id == user.event_id).order_by(Station.name)
     )
     stations = r.scalars().all()
@@ -49,6 +57,7 @@ async def station_ui(
         {
             "request": request,
             "user": user,
+            "host_name": host_name,
             "stations": stations,
             "stations_data": stations_data,
             "default_station": default_station,

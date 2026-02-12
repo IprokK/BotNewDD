@@ -51,7 +51,7 @@
     <h3>Ведущие ({{ hosts|length }})</h3>
     <p style="color:var(--admin-muted);">Добавить ведущих можно в разделе <a href="/admin/station-hosts">Ведущие станций</a>.</p>
     {% for h in hosts %}
-    <div style="padding: 8px 0; border-bottom: 1px solid var(--admin-border);">tg_id: {{ h.tg_id }}</div>
+    <div style="padding: 8px 0; border-bottom: 1px solid var(--admin-border);">{{ h.name or '—' }} <span style="color:var(--admin-muted);">(tg: {{ h.tg_id }})</span></div>
     {% else %}
     <p style="color:var(--admin-muted);">Нет ведущих</p>
     {% endfor %}
