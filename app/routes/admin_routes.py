@@ -417,6 +417,8 @@ async def admin_update_station(
     description: str = Form(""),
     address: str = Form(""),
     instructions: str = Form(""),
+    points_mode: str = Form("free"),
+    points_options: str = Form("0,1,2,3,5"),
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_admin),
 ):
@@ -435,6 +437,8 @@ async def admin_update_station(
     station.config["description"] = (description or "").strip()
     station.config["address"] = (address or "").strip()
     station.config["instructions"] = (instructions or "").strip()
+    station.config["points_mode"] = points_mode if points_mode in ("free", "select") else "free"
+    station.config["points_options"] = points_options.strip() if points_options.strip() else "0,1,2,3,5"
     await db.commit()
     return RedirectResponse(url=f"/admin/stations/{station_id}", status_code=303)
 

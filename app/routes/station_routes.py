@@ -24,25 +24,50 @@ async def station_ui(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_host),
 ):
-    """Station Host UI: scan QR, team info, start/finish, points."""
+    """Station Host UI: выбор станции, сканер QR, оценка. Ведущие могут подменять друг друга."""
     r = await db.execute(
-        select(Station).where(Station.id == user.station_id)
+        select(Station).where(Station.event_id == user.event_id).order_by(Station.name)
     )
-    station = r.scalar_one_or_none()
-    if not station:
+    stations = r.scalars().all()
+    default_station = next((s for s in stations if s.id == user.station_id), stations[0] if stations else None)
+    if not stations:
         return templates.TemplateResponse(
             "station/error.html",
-            {"request": request, "message": "Станция не найдена"},
+            {"request": request, "message": "Нет станций в мероприятии"},
             status_code=404,
         )
+    stations_data = [
+        {
+            "id": s.id,
+            "name": s.name,
+            "config": s.config or {},
+        }
+        for s in stations
+    ]
     return templates.TemplateResponse(
         "station/index.html",
-        {"request": request, "user": user, "station": station},
+        {
+            "request": request,
+            "user": user,
+            "stations": stations,
+            "stations_data": stations_data,
+            "default_station": default_station,
+        },
     )
 
 
 class ScanRequest(BaseModel):
     token: str
+    station_id: int | None = None
+
+
+async def _resolve_station_id(user: UserContext, station_id: int | None, db: AsyncSession, event_id: int) -> int | None:
+    """Вернуть station_id: из запроса или из сессии. Проверить, что станция принадлежит event."""
+    sid = station_id or user.station_id
+    if not sid:
+        return None
+    r = await db.execute(select(Station).where(Station.id == sid, Station.event_id == event_id))
+    return sid if r.scalar_one_or_none() else None
 
 
 @router.post("/station/scan")
@@ -53,6 +78,9 @@ async def station_scan(
     user: UserContext = Depends(require_host),
 ):
     """Validate QR token and return team info."""
+    station_id = await _resolve_station_id(user, req.station_id, db, user.event_id)
+    if not station_id:
+        return {"ok": False, "error": "Выберите станцию"}
     parsed = parse_qr_token(req.token)
     if not parsed or parsed[0] != user.event_id:
         return {"ok": False, "error": "Неверный QR-код"}
@@ -71,11 +99,10 @@ async def station_scan(
     if team.qr_token != req.token:
         return {"ok": False, "error": "Недействительный токен"}
 
-    # Check for active visit
     r = await db.execute(
         select(StationVisit).where(
             StationVisit.team_id == team_id,
-            StationVisit.station_id == user.station_id,
+            StationVisit.station_id == station_id,
             StationVisit.state != VisitState.FINISHED.value,
         )
     )
@@ -96,11 +123,13 @@ async def station_scan(
 
 class VisitStartRequest(BaseModel):
     team_id: int
+    station_id: int | None = None
 
 
 class VisitFinishRequest(BaseModel):
     team_id: int
-    points_awarded: int = 0
+    station_id: int | None = None
+    points_awarded: float = 0
     host_rating: int | None = None
     host_notes: str | None = None
 
@@ -111,10 +140,13 @@ async def visit_start(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_host),
 ):
+    station_id = await _resolve_station_id(user, req.station_id, db, user.event_id)
+    if not station_id:
+        return {"ok": False, "error": "Выберите станцию"}
     r = await db.execute(
         select(StationVisit).where(
             StationVisit.team_id == req.team_id,
-            StationVisit.station_id == user.station_id,
+            StationVisit.station_id == station_id,
             StationVisit.event_id == user.event_id,
         )
     )
@@ -128,7 +160,7 @@ async def visit_start(
         visit = StationVisit(
             event_id=user.event_id,
             team_id=req.team_id,
-            station_id=user.station_id,
+            station_id=station_id,
             state=VisitState.STARTED.value,
             started_at=datetime.now(timezone.utc),
         )
@@ -139,7 +171,7 @@ async def visit_start(
     r = await db.execute(select(Team).where(Team.id == req.team_id))
     team = r.scalar_one()
     team.current_state = "in_visit"
-    team.current_station_id = user.station_id
+    team.current_station_id = station_id
 
     await log_event(db, user.event_id, "visit_started", {"visit_id": visit.id, "team_id": req.team_id}, team_id=req.team_id)
     await db.commit()
@@ -156,10 +188,13 @@ async def visit_finish(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_host),
 ):
+    station_id = await _resolve_station_id(user, req.station_id, db, user.event_id)
+    if not station_id:
+        return {"ok": False, "error": "Выберите станцию"}
     r = await db.execute(
         select(StationVisit).where(
             StationVisit.team_id == req.team_id,
-            StationVisit.station_id == user.station_id,
+            StationVisit.station_id == station_id,
             StationVisit.event_id == user.event_id,
         )
     )
@@ -200,7 +235,7 @@ async def visit_finish(
     await ws_manager.broadcast_admin(user.event_id, "admin:visit_update", {"visit_id": visit.id})
 
     # Уведомление игроков в Telegram
-    r = await db.execute(select(Station).where(Station.id == user.station_id))
+    r = await db.execute(select(Station).where(Station.id == station_id))
     station = r.scalar_one_or_none()
     if station:
         r = await db.execute(select(Player).where(Player.team_id == req.team_id))

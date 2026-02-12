@@ -38,7 +38,7 @@
         .qr-btn { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: #fff; border: none; cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(196,92,38,0.3); }
         .qr-btn:active { transform: scale(0.95); }
         .main { flex: 1; overflow-y: auto; padding: 16px; }
-        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); display: grid; grid-template-columns: repeat(4, 1fr); padding: 8px 0 20px; box-shadow: 0 -2px 12px rgba(0,0,0,0.05); }
+        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); display: grid; grid-template-columns: repeat(3, 1fr); padding: 8px 0 20px; box-shadow: 0 -2px 12px rgba(0,0,0,0.05); }
         .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px; border: none; background: none; color: var(--muted); font-size: 0.7rem; cursor: pointer; text-decoration: none; font-family: inherit; }
         .nav-item.active { color: var(--accent); font-weight: 600; }
         .nav-item .icon { font-size: 1.4rem; }
@@ -83,7 +83,6 @@
     <nav class="bottom-nav">
         <a href="#" class="nav-item active" data-screen="items"><span class="icon">🎒</span> Предметы</a>
         <a href="#" class="nav-item" data-screen="quest"><span class="icon">🧩</span> Квест</a>
-        <a href="#" class="nav-item" data-screen="chats"><span class="icon">💬</span> Чаты</a>
         <a href="#" class="nav-item" data-screen="status"><span class="icon">🗺️</span> Статус</a>
     </nav>
     <div class="qr-modal" id="qr-modal">

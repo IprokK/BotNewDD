@@ -27,6 +27,17 @@
             <label>Инструкции для ведущих</label>
             <textarea name="instructions" rows="4" placeholder="Как проводить станцию, что говорить командам...">{{ station.config.get('instructions', '') or '' }}</textarea>
         </div>
+        <div style="margin-bottom: 16px;">
+            <label>Режим начисления очков</label>
+            <select name="points_mode">
+                <option value="free" {% if station.config.get('points_mode') == 'free' %}selected{% endif %}>Свободный ввод (можно дробные: 0.5, 1.5)</option>
+                <option value="select" {% if station.config.get('points_mode') == 'select' %}selected{% endif %}>Выбор из списка</option>
+            </select>
+        </div>
+        <div style="margin-bottom: 16px;" id="points-options-block">
+            <label>Варианты очков (через запятую)</label>
+            <input type="text" name="points_options" value="{{ station.config.get('points_options', '0,1,2,3,5') }}" placeholder="0, 1, 2, 3, 5">
+        </div>
         <div style="display: flex; gap: 12px;">
             <button type="submit">Сохранить</button>
             <form method="post" action="/admin/stations/{{ station.id }}/delete" style="display: inline;" onsubmit="return confirm('Удалить станцию? Ведущие и визиты будут отвязаны.');">

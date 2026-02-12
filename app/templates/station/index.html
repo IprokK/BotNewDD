@@ -1,7 +1,27 @@
 {% extends "station/base_host.html" %}
-{% block title %}{{ station.name }}{% endblock %}
-{% block station_name %}{{ station.name }}{% endblock %}
+{% block title %}Станция{% endblock %}
+{% block station_name %}{{ default_station.name if default_station else 'Станция' }}{% endblock %}
+{% block head %}
+<style>
+    .station-select-wrap { display: flex; align-items: center; gap: 8px; }
+    .station-select-wrap select { width: auto; min-width: 160px; margin: 0; }
+    .points-select-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .points-select-btns button { flex: 1; min-width: 50px; padding: 12px; }
+</style>
+{% endblock %}
 {% block content %}
+<div class="host-card">
+    <h2>Текущая станция</h2>
+    <div class="station-select-wrap">
+        <label style="margin:0;">Станция:</label>
+        <select id="station-select">
+            {% for s in stations_data %}
+            <option value="{{ s.id }}" {% if default_station and s.id == default_station.id %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</div>
+
 <div class="host-card">
     <h2>Сканирование</h2>
     <p id="scanned-team" style="min-height: 50px; color: var(--host-muted);">Нажмите кнопку и отсканируйте QR-код команды</p>
@@ -16,7 +36,10 @@
     <h2>Завершение визита</h2>
     <form id="finish-frm" onsubmit="finishVisit(event)">
         <label>Очки команде</label>
-        <input type="number" name="points_awarded" value="0" min="0" max="100">
+        <div id="points-input-free" style="display: none;">
+            <input type="number" id="points-free" name="points_awarded" value="0" min="0" max="100" step="0.5" placeholder="0 или 0.5">
+        </div>
+        <div id="points-input-select" class="points-select-btns" style="display: none;"></div>
         <label>Оценка команды (1–5 звёзд)</label>
         <div class="rating-stars" id="rating-stars">
             <button type="button" data-rating="1">★</button>
@@ -34,13 +57,38 @@
 
 <div id="scanner-container" class="host-card" style="display: none; margin-top: 16px;"></div>
 <div id="result" style="margin-top: 16px;"></div>
+
+<script>
+const stationsConfig = {{ stations_data|tojson }};
+</script>
 {% endblock %}
 {% block scripts %}
 <script>
+const stations = stationsConfig.map(s => ({
+    id: s.id,
+    name: s.name,
+    points_mode: (s.config || {}).points_mode || 'free',
+    points_options: ((s.config || {}).points_options || '0,1,2,3,5').split(',').map(x => parseFloat(x.trim())).filter(n => !isNaN(n))
+}));
+
 let scannedToken = null;
 let scannedTeamId = null;
 let qrScanner = null;
 let selectedRating = 0;
+
+document.getElementById('station-select').addEventListener('change', function() {
+    const sel = this.options[this.selectedIndex];
+    document.getElementById('station-badge').textContent = sel ? sel.text : 'Станция';
+});
+
+function getCurrentStationId() {
+    return parseInt(document.getElementById('station-select').value);
+}
+
+function getCurrentStation() {
+    const id = getCurrentStationId();
+    return stations.find(s => s.id === id) || stations[0];
+}
 
 async function startScan() {
     const container = document.getElementById('scanner-container');
@@ -83,7 +131,7 @@ async function submitScan(token) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ token })
+        body: JSON.stringify({ token, station_id: getCurrentStationId() })
     });
     const data = await res.json();
     if (data.ok) {
@@ -109,7 +157,7 @@ async function startVisit() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ team_id: scannedTeamId })
+        body: JSON.stringify({ team_id: scannedTeamId, station_id: getCurrentStationId() })
     });
     const data = await res.json();
     if (data.ok) {
@@ -123,6 +171,36 @@ function showFinishForm() {
     selectedRating = 0;
     document.querySelectorAll('.rating-stars button').forEach(b => b.classList.remove('active'));
     document.getElementById('host-rating-input').value = '';
+
+    const st = getCurrentStation();
+    const freeDiv = document.getElementById('points-input-free');
+    const selectDiv = document.getElementById('points-input-select');
+
+    if (st.points_mode === 'select' && st.points_options.length > 0) {
+        freeDiv.style.display = 'none';
+        selectDiv.style.display = 'flex';
+        selectDiv.innerHTML = '';
+        const defVal = st.points_options[0];
+        document.getElementById('points-free').value = defVal;
+        st.points_options.forEach(v => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'host-btn host-btn-ghost points-opt-btn' + (v === defVal ? ' host-btn-primary' : '');
+            btn.textContent = v;
+            btn.dataset.points = v;
+            btn.onclick = () => {
+                document.querySelectorAll('.points-opt-btn').forEach(b => { b.classList.remove('host-btn-primary'); b.classList.add('host-btn-ghost'); });
+                btn.classList.add('host-btn-primary');
+                btn.classList.remove('host-btn-ghost');
+                document.getElementById('points-free').value = v;
+            };
+            selectDiv.appendChild(btn);
+        });
+    } else {
+        freeDiv.style.display = 'block';
+        selectDiv.style.display = 'none';
+        document.getElementById('points-free').value = 0;
+    }
 }
 
 document.querySelectorAll('.rating-stars button').forEach(btn => {
@@ -139,13 +217,16 @@ async function finishVisit(e) {
     e.preventDefault();
     const f = document.getElementById('finish-frm');
     const fd = new FormData(f);
+    const ptsInput = document.getElementById('points-free');
+    const ptsVal = ptsInput ? parseFloat(ptsInput.value) || 0 : 0;
     const res = await fetch('/station/visit/finish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
             team_id: scannedTeamId,
-            points_awarded: parseInt(fd.get('points_awarded') || 0),
+            station_id: getCurrentStationId(),
+            points_awarded: ptsVal,
             host_rating: parseInt(fd.get('host_rating') || 0) || null,
             host_notes: fd.get('host_notes') || null
         })

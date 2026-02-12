@@ -2,7 +2,7 @@
 from datetime import datetime
 from enum import Enum as PyEnum
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -81,7 +81,7 @@ class Team(Base):
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="active")
-    score_total: Mapped[int] = mapped_column(Integer, default=0)
+    score_total: Mapped[float] = mapped_column(Float, default=0)
     current_state: Mapped[str] = mapped_column(
         String(20), default=TeamState.FREE_ROAM.value, nullable=False
     )
@@ -177,7 +177,7 @@ class StationVisit(Base):
     state: Mapped[str] = mapped_column(String(20), default=VisitState.ARRIVED.value, nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    points_awarded: Mapped[int] = mapped_column(Integer, default=0)
+    points_awarded: Mapped[float] = mapped_column(Float, default=0)
     host_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     host_rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
