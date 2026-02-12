@@ -147,7 +147,7 @@ async def cmd_register(message: Message, state: FSMContext):
 
 
 # --- Выбор волны запуска (ответ на рассылку из админки) ---
-WAVE_OPTIONS = ("13:00", "15:00", "17:10", "В перерывах между парами")
+WAVE_OPTIONS = ("13:00", "15:00", "17:10", "В перерывах между занятиями")
 
 
 @dp.message(F.text.in_(WAVE_OPTIONS))
