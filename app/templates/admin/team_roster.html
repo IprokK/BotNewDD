@@ -18,7 +18,18 @@
         min-height: 100px;
     }
     .roster-column.roster-unassigned { flex: 1 1 180px; min-width: 180px; }
-    .roster-column.roster-team { flex: 0 0 130px; }
+    .roster-column.roster-team {
+        flex: 0 0 130px;
+        max-height: 140px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    .roster-column.roster-team .player-list {
+        flex: 1;
+        overflow-y: auto;
+        min-height: 44px;
+    }
     .roster-column.drag-over { border-color: var(--admin-accent); background: rgba(88,166,255,0.15); }
     .roster-column h3 {
         margin: 0 0 10px;
