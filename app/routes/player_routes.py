@@ -15,7 +15,9 @@ from app.models import (
     Delivery,
     DialogueMessage,
     DialogueReply,
+    DialogueStartConfig,
     DialogueThread,
+    DialogueThreadUnlock,
     Player,
     Rating,
     RegistrationForm,
@@ -31,7 +33,21 @@ router = APIRouter(tags=["player"])
 templates = Jinja2Templates(directory="app/templates")
 
 
-@router.get("/player", response_class=HTMLResponse)
+async def _get_dialogue_visibility(db: AsyncSession, event_id: int, team_id: int | None) -> tuple[set[int], set[int]]:
+    """(thread_ids_with_config, unlocked_ids). Диалог виден если: нет в with_config ИЛИ есть в unlocked."""
+    r = await db.execute(select(DialogueStartConfig.thread_id).where(DialogueStartConfig.event_id == event_id))
+    with_config = {row[0] for row in r.all()}
+    unlocked = set()
+    if team_id:
+        r = await db.execute(
+            select(DialogueThreadUnlock.thread_id).where(DialogueThreadUnlock.team_id == team_id)
+        )
+        unlocked = {row[0] for row in r.all()}
+    return (with_config, unlocked)
+
+
+def _thread_visible(thread_id: int, with_config: set[int], unlocked: set[int]) -> bool:
+    return thread_id not in with_config or thread_id in unlocked
 async def player_dashboard(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -72,7 +88,9 @@ async def player_dashboard(
         .options(selectinload(DialogueThread.messages))
         .where(DialogueThread.event_id == user.event_id)
     )
-    threads = list(r.scalars().all())
+    all_threads = list(r.scalars().all())
+    with_cfg, unlocked = await _get_dialogue_visibility(db, user.event_id, user.team_id)
+    threads = [t for t in all_threads if _thread_visible(t.id, with_cfg, unlocked)]
     for t in threads:
         ms_sorted = sorted(t.messages, key=lambda x: x.order_index)
         first = next((m for m in ms_sorted if (m.payload or {}).get("text")), None)
@@ -282,7 +300,9 @@ async def dialogues_list(
             DialogueThread.event_id == user.event_id
         )
     )
-    threads = list(r.scalars().all())
+    all_threads = list(r.scalars().all())
+    with_cfg, unlocked = await _get_dialogue_visibility(db, user.event_id, user.team_id)
+    threads = [t for t in all_threads if _thread_visible(t.id, with_cfg, unlocked)]
     for t in threads:
         ms_sorted = sorted(t.messages, key=lambda x: x.order_index)
         first = next((m for m in ms_sorted if (m.payload or {}).get("text")), None)
@@ -367,6 +387,14 @@ async def dialogue_view(
             "player/error.html",
             {"request": request, "message": "Диалог не найден"},
             status_code=404,
+        )
+
+    with_cfg, unlocked = await _get_dialogue_visibility(db, user.event_id, user.team_id)
+    if not _thread_visible(thread.id, with_cfg, unlocked):
+        return templates.TemplateResponse(
+            "player/error.html",
+            {"request": request, "message": "Этот диалог ещё недоступен для вашей команды"},
+            status_code=403,
         )
 
     rp = await db.execute(select(Player).where(Player.id == user.player_id))

@@ -16,7 +16,9 @@ from app.models import (
     ContentAudience,
     DialogueMessage,
     DialogueReply,
+    DialogueStartConfig,
     DialogueThread,
+    DialogueThreadUnlock,
     Event,
     EventLog,
     EventUser,
@@ -29,6 +31,7 @@ from app.models import (
     StationVisit,
     Team,
     TeamChatMessage,
+    TeamGroup,
     TeamState,
 )
 from app.services import generate_qr_token, log_event, ws_manager
@@ -898,6 +901,175 @@ async def admin_quest_control_save(
     team.team_progress = prog
     await db.flush()
     return RedirectResponse(url=f"/admin/quest-control?team_id={team_id}", status_code=303)
+
+
+# --- Старты диалогов ---
+from app.notify import notify_dialogue_unlocked
+
+
+async def _unlock_and_notify(db, thread, team_ids, event_id):
+    """Разблокировать диалог для команд и отправить уведомления."""
+    from config import settings
+    webapp = settings.webapp_url.rstrip("/")
+    for tid in team_ids:
+        r = await db.execute(
+            select(DialogueThreadUnlock).where(
+                DialogueThreadUnlock.thread_id == thread.id,
+                DialogueThreadUnlock.team_id == tid,
+            )
+        )
+        if r.scalar_one_or_none():
+            continue
+        r2 = await db.execute(select(Player).where(Player.team_id == tid))
+        for p in r2.scalars().all():
+            if p.tg_id:
+                await notify_dialogue_unlocked(
+                    p.tg_id, thread.title or thread.key, f"{webapp}/dialogues/{thread.key}"
+                )
+        db.add(DialogueThreadUnlock(thread_id=thread.id, team_id=tid))
+    await db.commit()
+
+
+@router.get("/dialogue-starts", response_class=HTMLResponse)
+async def admin_dialogue_starts(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    """Панель управления стартами диалогов."""
+    r = await db.execute(
+        select(DialogueThread).where(DialogueThread.event_id == user.event_id).order_by(DialogueThread.title)
+    )
+    threads = r.scalars().all()
+    r = await db.execute(
+        select(TeamGroup).where(TeamGroup.event_id == user.event_id)
+    )
+    team_groups = r.scalars().all()
+    r = await db.execute(
+        select(DialogueStartConfig, DialogueThread)
+        .join(DialogueThread, DialogueStartConfig.thread_id == DialogueThread.id)
+        .where(DialogueStartConfig.event_id == user.event_id)
+        .order_by(DialogueStartConfig.order_index, DialogueStartConfig.id)
+    )
+    configs = r.all()
+    r = await db.execute(select(Team).where(Team.event_id == user.event_id).order_by(Team.name))
+    teams = r.scalars().all()
+    return templates.TemplateResponse(
+        "admin/dialogue_starts.html",
+        {
+            "request": request,
+            "user": user,
+            "threads": threads,
+            "team_groups": team_groups,
+            "configs": configs,
+            "teams": teams,
+        },
+    )
+
+
+@router.post("/team-groups")
+async def admin_create_team_group(
+    name: str = Form(...),
+    team_ids: str = Form(""),  # comma-separated
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    import json
+    ids = [int(x.strip()) for x in team_ids.split(",") if x.strip()]
+    g = TeamGroup(event_id=user.event_id, name=name.strip(), team_ids=ids)
+    db.add(g)
+    await db.flush()
+    return RedirectResponse(url="/admin/dialogue-starts", status_code=303)
+
+
+@router.post("/dialogue-start-configs")
+async def admin_create_dialogue_start_config(
+    thread_id: int = Form(...),
+    start_at: str = Form(""),
+    target_type: str = Form("all"),
+    target_team_ids: str = Form(""),
+    target_group_id: int = Form(None),
+    order_index: int = Form(0),
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    team_ids = [int(x.strip()) for x in target_team_ids.split(",") if x.strip()] if target_team_ids else []
+    start_dt = None
+    if start_at and start_at.strip():
+        try:
+            start_dt = datetime.fromisoformat(start_at.replace("Z", "+00:00"))
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            pass
+    cfg = DialogueStartConfig(
+        event_id=user.event_id,
+        thread_id=thread_id,
+        start_at=start_dt,
+        target_type=target_type,
+        target_team_ids=team_ids if target_type == "teams" else [],
+        target_group_id=target_group_id if target_type == "group" and target_group_id else None,
+        order_index=order_index,
+    )
+    db.add(cfg)
+    await db.flush()
+    return RedirectResponse(url="/admin/dialogue-starts", status_code=303)
+
+
+@router.post("/dialogue-starts/trigger/{config_id}")
+async def admin_trigger_dialogue_start(
+    config_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    r = await db.execute(
+        select(DialogueStartConfig, DialogueThread)
+        .join(DialogueThread, DialogueStartConfig.thread_id == DialogueThread.id)
+        .where(
+            DialogueStartConfig.id == config_id,
+            DialogueStartConfig.event_id == user.event_id,
+        )
+    )
+    row = r.first()
+    if not row:
+        return RedirectResponse(url="/admin/dialogue-starts?err=notfound", status_code=303)
+    config, thread = row
+    team_ids = []
+    if config.target_type == "all":
+        r2 = await db.execute(select(Team.id).where(Team.event_id == user.event_id))
+        team_ids = [row[0] for row in r2.all()]
+    elif config.target_type == "teams":
+        team_ids = list(config.target_team_ids or [])
+    elif config.target_type == "group" and config.target_group_id:
+        r2 = await db.execute(
+            select(TeamGroup.team_ids).where(
+                TeamGroup.id == config.target_group_id,
+                TeamGroup.event_id == user.event_id,
+            )
+        )
+        rw = r2.first()
+        team_ids = list(rw[0] or []) if rw else []
+    await _unlock_and_notify(db, thread, team_ids, user.event_id)
+    return RedirectResponse(url="/admin/dialogue-starts?triggered=ok", status_code=303)
+
+
+@router.post("/dialogue-starts/delete-config/{config_id}")
+async def admin_delete_dialogue_start_config(
+    config_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    r = await db.execute(
+        select(DialogueStartConfig).where(
+            DialogueStartConfig.id == config_id,
+            DialogueStartConfig.event_id == user.event_id,
+        )
+    )
+    cfg = r.scalar_one_or_none()
+    if cfg:
+        await db.delete(cfg)
+        await db.flush()
+    return RedirectResponse(url="/admin/dialogue-starts", status_code=303)
 
 
 @router.get("/qr-items", response_class=HTMLResponse)

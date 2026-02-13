@@ -244,6 +244,41 @@ class DialogueScheduledDelivery(Base):
     delivered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class TeamGroup(Base):
+    """Группа команд (напр. «Волна 13:00»)."""
+    __tablename__ = "team_groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    team_ids: Mapped[list] = mapped_column(JSON, default=list)  # [1, 2, 3]
+
+
+class DialogueStartConfig(Base):
+    """Правило старта диалога: когда и для кого он становится доступен."""
+    __tablename__ = "dialogue_start_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), nullable=False)
+    thread_id: Mapped[int] = mapped_column(ForeignKey("dialogue_threads.id", ondelete="CASCADE"), nullable=False)
+    start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # null = только вручную
+    target_type: Mapped[str] = mapped_column(String(20), default="all")  # all | teams | group
+    target_team_ids: Mapped[list] = mapped_column(JSON, default=list)  # для target_type=teams
+    target_group_id: Mapped[int | None] = mapped_column(ForeignKey("team_groups.id", ondelete="SET NULL"), nullable=True)
+    order_index: Mapped[int] = mapped_column(Integer, default=0)  # последовательность
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DialogueThreadUnlock(Base):
+    """Факт разблокировки диалога для команды (появился в мини-аппе, уведомление отправлено)."""
+    __tablename__ = "dialogue_thread_unlocks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    thread_id: Mapped[int] = mapped_column(ForeignKey("dialogue_threads.id", ondelete="CASCADE"), nullable=False)
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    unlocked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class DialogueReply(Base):
     """Ответ участника на сообщение (для ветвления и условий)."""
     __tablename__ = "dialogue_replies"

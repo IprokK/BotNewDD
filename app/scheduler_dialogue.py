@@ -8,11 +8,14 @@ from app.models import (
     ContentAudience,
     DialogueMessage,
     DialogueScheduledDelivery,
+    DialogueStartConfig,
     DialogueThread,
+    DialogueThreadUnlock,
     Player,
     Team,
+    TeamGroup,
 )
-from app.notify import notify_dialogue_message
+from app.notify import notify_dialogue_message, notify_dialogue_unlocked
 from config import settings
 
 
@@ -112,4 +115,60 @@ async def process_scheduled_dialogues() -> None:
                 d = DialogueScheduledDelivery(message_id=msg.id, team_id=team.id)
                 db.add(d)
 
+            await db.commit()
+
+
+async def process_dialogue_starts() -> None:
+    """Проверить DialogueStartConfig и разблокировать диалоги по расписанию."""
+    now = datetime.now(timezone.utc)
+    webapp = settings.webapp_url.rstrip("/")
+
+    async with async_session_maker() as db:
+        r = await db.execute(
+            select(DialogueStartConfig, DialogueThread)
+            .join(DialogueThread, DialogueStartConfig.thread_id == DialogueThread.id)
+            .where(DialogueStartConfig.start_at.isnot(None))
+        )
+        for config, thread in r.all():
+            sa = config.start_at
+            if sa and sa.tzinfo is None:
+                sa = sa.replace(tzinfo=timezone.utc)
+            if not sa or now < sa:
+                continue
+
+            team_ids = []
+            if config.target_type == "all":
+                r2 = await db.execute(select(Team.id).where(Team.event_id == config.event_id))
+                team_ids = [row[0] for row in r2.all()]
+            elif config.target_type == "teams":
+                team_ids = list(config.target_team_ids or [])
+            elif config.target_type == "group" and config.target_group_id:
+                r2 = await db.execute(
+                    select(TeamGroup.team_ids).where(
+                        TeamGroup.id == config.target_group_id,
+                        TeamGroup.event_id == config.event_id,
+                    )
+                )
+                row = r2.first()
+                team_ids = list(row[0] or []) if row else []
+
+            for tid in team_ids:
+                r3 = await db.execute(
+                    select(DialogueThreadUnlock).where(
+                        DialogueThreadUnlock.thread_id == thread.id,
+                        DialogueThreadUnlock.team_id == tid,
+                    )
+                )
+                if r3.scalar_one_or_none():
+                    continue
+
+                r4 = await db.execute(select(Player).where(Player.team_id == tid))
+                for p in r4.scalars().all():
+                    if p.tg_id:
+                        await notify_dialogue_unlocked(
+                            p.tg_id, thread.title or thread.key, f"{webapp}/dialogues/{thread.key}"
+                        )
+                db.add(
+                    DialogueThreadUnlock(thread_id=thread.id, team_id=tid)
+                )
             await db.commit()

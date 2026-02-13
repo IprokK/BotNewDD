@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from app.auth import decode_jwt, get_user_from_session
 from app.database import engine, Base, async_session_maker
 from app.routes import admin_routes, admin_db, auth_routes, dev_routes, pages, player_routes, station_routes
-from app.scheduler_dialogue import process_scheduled_dialogues
+from app.scheduler_dialogue import process_dialogue_starts, process_scheduled_dialogues
 from app.websocket_hub import ws_manager
 
 _scheduler: AsyncIOScheduler | None = None
@@ -26,6 +26,12 @@ async def lifespan(app: FastAPI):
         "interval",
         minutes=1,
         id="dialogue_scheduled",
+    )
+    _scheduler.add_job(
+        process_dialogue_starts,
+        "interval",
+        minutes=1,
+        id="dialogue_starts",
     )
     _scheduler.start()
     yield

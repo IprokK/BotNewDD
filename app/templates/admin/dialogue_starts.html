@@ -1,0 +1,138 @@
+{% extends "admin/base.html" %}
+{% block title %}Старты диалогов{% endblock %}
+{% block content %}
+<h2>🚀 Управление стартами диалогов</h2>
+<p style="color:var(--admin-muted);">Настройте, когда диалоги появляются в мини-аппе и игрокам приходит уведомление. Можно запускать по расписанию или вручную — для всех команд, выбранных или группы.</p>
+
+{% if request.query_params.get('triggered') == 'ok' %}
+<div style="padding:12px;background:var(--admin-success);color:#fff;border-radius:8px;margin-bottom:16px;">✅ Диалог разблокирован, уведомления отправлены</div>
+{% endif %}
+{% if request.query_params.get('err') == 'notfound' %}
+<div style="padding:12px;background:var(--admin-warning);color:#fff;border-radius:8px;margin-bottom:16px;">⚠️ Конфиг не найден</div>
+{% endif %}
+
+<div class="card" style="margin-bottom:24px;">
+    <h3>Группы команд</h3>
+    <p style="font-size:0.9rem;color:var(--admin-muted);margin-bottom:12px;">Создайте группу (напр. «Волна 13:00») и выберите команды.</p>
+    <form method="post" action="/admin/team-groups" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+        <div>
+            <label style="display:block;font-size:0.85rem;color:var(--admin-muted);margin-bottom:4px;">Название</label>
+            <input type="text" name="name" placeholder="Волна 13:00" required>
+        </div>
+        <div style="flex:1;min-width:200px;">
+            <label style="display:block;font-size:0.85rem;color:var(--admin-muted);margin-bottom:4px;">ID команд через запятую</label>
+            <input type="text" name="team_ids" placeholder="1, 2, 3" style="width:100%;">
+        </div>
+        <button type="submit">Создать группу</button>
+    </form>
+    {% if team_groups %}
+    <ul style="margin-top:16px;padding-left:20px;">
+        {% for g in team_groups %}
+        <li><strong>{{ g.name }}</strong> — {{ (g.team_ids or [])|length }} команд</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</div>
+
+<div class="card" style="margin-bottom:24px;">
+    <h3>Добавить правило старта</h3>
+    <form method="post" action="/admin/dialogue-start-configs" style="display:grid;gap:12px;max-width:500px;">
+        <div>
+            <label style="display:block;font-size:0.85rem;color:var(--admin-muted);margin-bottom:4px;">Диалог</label>
+            <select name="thread_id" required>
+                <option value="">— Выберите —</option>
+                {% for t in threads %}
+                <option value="{{ t.id }}">{{ t.title or t.key }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label style="display:block;font-size:0.85rem;color:var(--admin-muted);margin-bottom:4px;">Старт (дата и время, пусто = только вручную)</label>
+            <input type="datetime-local" name="start_at">
+        </div>
+        <div>
+            <label style="display:block;font-size:0.85rem;color:var(--admin-muted);margin-bottom:4px;">Кому</label>
+            <select name="target_type" id="target-type">
+                <option value="all">Все команды</option>
+                <option value="teams">Выбранные команды</option>
+                <option value="group">Группа команд</option>
+            </select>
+        </div>
+        <div id="target-teams" style="display:none;">
+            <label style="display:block;font-size:0.85rem;color:var(--admin-muted);margin-bottom:4px;">ID команд через запятую</label>
+            <input type="text" name="target_team_ids" placeholder="1, 2, 3">
+        </div>
+        <div id="target-group" style="display:none;">
+            <label style="display:block;font-size:0.85rem;color:var(--admin-muted);margin-bottom:4px;">Группа</label>
+            <select name="target_group_id">
+                <option value="">— Выберите —</option>
+                {% for g in team_groups %}
+                <option value="{{ g.id }}">{{ g.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label style="display:block;font-size:0.85rem;color:var(--admin-muted);margin-bottom:4px;">Порядок (0, 1, 2...)</label>
+            <input type="number" name="order_index" value="0">
+        </div>
+        <button type="submit">Добавить</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Правила старта ({{ configs|length }})</h3>
+    <p style="font-size:0.9rem;color:var(--admin-muted);margin-bottom:12px;">Диалоги без правила — видны всем сразу. С правилом — только после разблокировки.</p>
+    <table style="width:100%;border-collapse:collapse;">
+        <thead>
+            <tr style="border-bottom:1px solid var(--admin-border);">
+                <th style="text-align:left;padding:8px;">Диалог</th>
+                <th style="text-align:left;padding:8px;">Старт</th>
+                <th style="text-align:left;padding:8px;">Кому</th>
+                <th style="padding:8px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cfg, thread in configs %}
+            <tr style="border-bottom:1px solid var(--admin-border);">
+                <td style="padding:8px;">{{ thread.title or thread.key }}</td>
+                <td style="padding:8px;">{% if cfg.start_at %}{{ cfg.start_at.strftime('%d.%m.%Y %H:%M') }}{% else %}вручную{% endif %}</td>
+                <td style="padding:8px;">
+                    {% if cfg.target_type == 'all' %}Все команды
+                    {% elif cfg.target_type == 'teams' %}{{ (cfg.target_team_ids or [])|length }} команд
+                    {% elif cfg.target_type == 'group' %}Группа
+                    {% else %}{{ cfg.target_type }}{% endif %}
+                </td>
+                <td style="padding:8px;">
+                    <form method="post" action="/admin/dialogue-starts/trigger/{{ cfg.id }}" style="display:inline;">
+                        <button type="submit" style="padding:4px 10px;font-size:0.85rem;">Запустить сейчас</button>
+                    </form>
+                    <form method="post" action="/admin/dialogue-starts/delete-config/{{ cfg.id }}" style="display:inline;margin-left:8px;" onsubmit="return confirm('Удалить правило?');">
+                        <button type="submit" style="padding:4px 8px;font-size:0.85rem;background:#8b2635;">Удалить</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="padding:16px;color:var(--admin-muted);">Нет правил</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<p style="margin-top:16px;font-size:0.85rem;color:var(--admin-muted);">
+    Команды: {% for t in teams %}{{ t.id }}=<{{ t.name }}> {% endfor %}
+</p>
+
+<script>
+(function(){
+    const tt = document.getElementById('target-type');
+    const divTeams = document.getElementById('target-teams');
+    const divGroup = document.getElementById('target-group');
+    function show(){
+        divTeams.style.display = tt.value === 'teams' ? 'block' : 'none';
+        divGroup.style.display = tt.value === 'group' ? 'block' : 'none';
+    }
+    tt.onchange = show;
+    show();
+})();
+</script>
+{% endblock %}
