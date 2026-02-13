@@ -48,6 +48,9 @@ async def _get_dialogue_visibility(db: AsyncSession, event_id: int, team_id: int
 
 def _thread_visible(thread_id: int, with_config: set[int], unlocked: set[int]) -> bool:
     return thread_id not in with_config or thread_id in unlocked
+
+
+@router.get("/player", response_class=HTMLResponse)
 async def player_dashboard(
     request: Request,
     db: AsyncSession = Depends(get_db),
