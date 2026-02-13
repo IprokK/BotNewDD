@@ -480,3 +480,48 @@ def get_diary_for_role(role: str) -> tuple[str, str]:
     if r == "B":
         return "Записи Анны", format_diary_html(DIARY_ANNA)
     return "Записи Марка", format_diary_html(DIARY_MARK)
+
+
+_ENTRY_START = re.compile(r"^(Запись \d+)\s*$", re.MULTILINE)
+
+
+def _split_into_entries(raw: str) -> list[dict]:
+    """Разбивает сырой текст на записи. Каждая: title, date, body."""
+    entries = []
+    parts = _ENTRY_START.split(raw.strip())
+    # parts[0] пустой, затем чередуются: title, content
+    i = 1
+    while i < len(parts):
+        title = parts[i].strip()  # "Запись 1"
+        i += 1
+        content = parts[i].strip() if i < len(parts) else ""
+        i += 1
+        lines = content.split("\n")
+        date = ""
+        body_lines = lines
+        if lines and _DATE_PATTERN.match(lines[0].strip()):
+            date = lines[0].strip()
+            body_lines = lines[1:]
+        entries.append({
+            "title": title,
+            "date": date,
+            "body": "\n".join(body_lines),
+        })
+    return entries
+
+
+def get_diary_entries_for_role(role: str) -> tuple[str, list[dict]]:
+    """Возвращает (subtitle, entries). Каждая entry: title, date, body_html."""
+    r = (role or "A").upper().replace("ROLE_", "")
+    raw = DIARY_ANNA if r == "B" else DIARY_MARK
+    subtitle = "Записи Анны" if r == "B" else "Записи Марка"
+    entries = _split_into_entries(raw)
+    result = []
+    for e in entries:
+        full = f"{e['title']}\n{e['date']}\n{e['body']}" if e["date"] else f"{e['title']}\n{e['body']}"
+        result.append({
+            "title": html.escape(e["title"]),
+            "date": html.escape(e["date"]),
+            "body_html": format_diary_html(full),
+        })
+    return subtitle, result

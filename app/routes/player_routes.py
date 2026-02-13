@@ -153,8 +153,8 @@ async def player_dashboard(
     inventory = list((player.player_progress or {}).get("inventory") or [])
 
     # Контент дневника по роли (для предмета «Личный дневник»)
-    from app.diary_content import get_diary_for_role
-    diary_subtitle, diary_content = get_diary_for_role(player_role)
+    from app.diary_content import get_diary_entries_for_role
+    diary_subtitle, diary_entries = get_diary_entries_for_role(player_role)
 
     # Все станции и посещённые — для маршрутного листа
     r = await db.execute(
@@ -222,7 +222,7 @@ async def player_dashboard(
             "visited_station_ids": visited_station_ids,
             "current_station_id": current_station_id,
             "diary_subtitle": diary_subtitle,
-            "diary_content": diary_content,
+            "diary_entries": diary_entries,
         },
     )
 
