@@ -77,7 +77,10 @@
     .player-card:hover { border-color: var(--admin-border); }
     .player-card.sortable-ghost { opacity: 0.5; }
     .player-card .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .player-card .role { font-size: 0.7rem; color: var(--admin-muted); flex-shrink: 0; }
+    .player-card .role-cell { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+    .player-card .role { font-size: 0.7rem; color: var(--admin-muted); }
+    .player-card .role-btn { background: var(--admin-border); border: none; color: var(--admin-text); cursor: pointer; padding: 2px 6px; font-size: 0.7rem; border-radius: 4px; }
+    .player-card .role-btn:hover { background: var(--admin-accent); color: #fff; }
     .player-card .remove-btn { background: transparent; border: none; color: var(--admin-muted); cursor: pointer; padding: 2px 4px; font-size: 0.9rem; }
     .player-card .remove-btn:hover { color: #f85149; }
 </style>
@@ -106,9 +109,12 @@
             <h3>{{ team.name }}</h3>
             <div class="player-list" data-team-id="{{ team.id }}">
                 {% for item in by_team.get(team.id, []) %}
-                <div class="player-card" data-player-id="{{ item.player.id }}" draggable="true">
+                <div class="player-card" data-player-id="{{ item.player.id }}" data-team-id="{{ team.id }}" data-role="{{ (item.player.role or 'A')|replace('ROLE_','') }}" draggable="true">
                     <span class="name">{{ item.name }}</span>
-                    <span class="role">{{ item.player.role or 'A' }}</span>
+                    <span class="role-cell">
+                        <span class="role">{{ (item.player.role or 'A')|replace('ROLE_','') }}</span>
+                        <button type="button" class="role-btn" title="Сменить роль">↔</button>
+                    </span>
                 </div>
                 {% else %}
                 <div class="empty-placeholder" style="color:var(--admin-muted);font-size:0.8rem;">Пусто</div>
@@ -149,10 +155,11 @@
                 evt.from.appendChild(ph);
             }
             if (!playerId) return;
+            const currentRole = evt.item?.dataset?.role || 'A';
             const res = await fetch(`/admin/players/${playerId}/team`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ team_id: teamId, role: 'ROLE_A' })
+                body: JSON.stringify({ team_id: teamId, role: 'ROLE_' + currentRole })
             });
             const data = await res.json();
             if (!data.ok) {
@@ -161,11 +168,39 @@
             }
         }
     };
+    document.getElementById('col-unassigned').querySelector('.player-list')?.addEventListener('click', handleRoleClick);
     Sortable.create(document.getElementById('col-unassigned').querySelector('.player-list'), sortableOpts);
+
+    async function handleRoleClick(ev) {
+        const btn = ev.target.closest('.role-btn');
+        if (!btn) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        const card = btn.closest('.player-card');
+        const playerId = card?.dataset?.playerId;
+        const teamId = card?.dataset?.teamId;
+        const role = card?.dataset?.role || 'A';
+        if (!playerId || !teamId) return;
+        const newRole = role === 'A' ? 'ROLE_B' : 'ROLE_A';
+        const res = await fetch(`/admin/players/${playerId}/team`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ team_id: parseInt(teamId), role: newRole })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            const newVal = newRole.replace('ROLE_', '');
+            card.dataset.role = newVal;
+            card.querySelector('.role')?.replaceWith(Object.assign(document.createElement('span'), { className: 'role', textContent: newVal }));
+        } else {
+            alert(data.error || 'Ошибка');
+        }
+    }
 
     document.querySelectorAll('.roster-column.roster-team').forEach(col => {
         const list = col.querySelector('.player-list');
         if (!list) return;
+        list.addEventListener('click', handleRoleClick);
         Sortable.create(list, sortableOpts);
     });
 })();
