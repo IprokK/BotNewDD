@@ -478,6 +478,12 @@ async def dialogue_view(
 
     characters = ((thread.config or {}).get("characters") or {})
 
+    # Опции ответа только с валидным next_message_id (конечные узлы графа без связей не показываем как «выбор»)
+    pending_reply_opts = []
+    if pending_reply:
+        opts = (pending_reply.payload or {}).get("reply_options") or []
+        pending_reply_opts = [o for o in opts if o.get("next_message_id")]
+
     player_role = (player.role or "A").replace("ROLE_", "") if player else "—"
     return templates.TemplateResponse(
         "player/dialogue.html",
@@ -486,7 +492,8 @@ async def dialogue_view(
             "user": user,
             "thread": thread,
             "messages_enriched": enriched,
-            "pending_reply": pending_reply,
+            "pending_reply": pending_reply if pending_reply_opts else None,
+            "pending_reply_opts": pending_reply_opts,
             "team": team,
             "player_role": player_role,
             "characters": characters,

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     app_url: str = "http://localhost:8000"
     webapp_url: str = "http://localhost:8000/player"
     tg_allowed_ids: str = ""  # Комма через запятую — кому доступен mini-app. Пусто = без ограничений.
+    event_timezone: str = "Europe/Moscow"  # Таймзона для start_at (Europe/Moscow, UTC и т.д.)
 
     class Config:
         env_file = ".env"

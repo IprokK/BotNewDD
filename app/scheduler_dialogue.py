@@ -121,7 +121,6 @@ async def process_scheduled_dialogues() -> None:
 async def process_dialogue_starts() -> None:
     """Проверить DialogueStartConfig и разблокировать диалоги по расписанию."""
     now = datetime.now(timezone.utc)
-    webapp = settings.webapp_url.rstrip("/")
 
     async with async_session_maker() as db:
         r = await db.execute(
@@ -165,9 +164,7 @@ async def process_dialogue_starts() -> None:
                 r4 = await db.execute(select(Player).where(Player.team_id == tid))
                 for p in r4.scalars().all():
                     if p.tg_id:
-                        await notify_dialogue_unlocked(
-                            p.tg_id, thread.title or thread.key, f"{webapp}/dialogues/{thread.key}"
-                        )
+                        await notify_dialogue_unlocked(p.tg_id, thread.title or thread.key)
                 db.add(
                     DialogueThreadUnlock(thread_id=thread.id, team_id=tid)
                 )

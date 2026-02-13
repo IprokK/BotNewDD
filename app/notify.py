@@ -100,7 +100,7 @@ async def send_wave_message(tg_id: int) -> bool:
     return await send_telegram_with_keyboard(tg_id, WAVE_MESSAGE_TEXT, WAVE_KEYBOARD_BUTTONS)
 
 
-async def notify_dialogue_unlocked(tg_id: int, thread_title: str, webapp_url: str) -> bool:
+async def notify_dialogue_unlocked(tg_id: int, thread_title: str, webapp_url: str = "") -> bool:
     """Уведомить о новом доступном диалоге (непрочитанное сообщение)."""
-    text = f"💬 *Новый диалог:* {_esc(thread_title)}\n\n👉 Открыть: {webapp_url}"
+    text = "💬 У вас новое сообщение в телефоне — войдите в игру."
     return await send_telegram(tg_id, text)

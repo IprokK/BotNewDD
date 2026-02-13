@@ -1,5 +1,6 @@
 """Admin dashboard routes."""
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -34,6 +35,7 @@ from app.models import (
     TeamGroup,
     TeamState,
 )
+from config import settings as app_settings
 from app.services import generate_qr_token, log_event, ws_manager
 from app.notify import notify_player_assigned, notify_station_assigned, send_wave_message
 
@@ -909,8 +911,6 @@ from app.notify import notify_dialogue_unlocked
 
 async def _unlock_and_notify(db, thread, team_ids, event_id):
     """Разблокировать диалог для команд и отправить уведомления."""
-    from config import settings
-    webapp = settings.webapp_url.rstrip("/")
     for tid in team_ids:
         r = await db.execute(
             select(DialogueThreadUnlock).where(
@@ -923,9 +923,7 @@ async def _unlock_and_notify(db, thread, team_ids, event_id):
         r2 = await db.execute(select(Player).where(Player.team_id == tid))
         for p in r2.scalars().all():
             if p.tg_id:
-                await notify_dialogue_unlocked(
-                    p.tg_id, thread.title or thread.key, f"{webapp}/dialogues/{thread.key}"
-                )
+                await notify_dialogue_unlocked(p.tg_id, thread.title or thread.key)
         db.add(DialogueThreadUnlock(thread_id=thread.id, team_id=tid))
     await db.commit()
 
@@ -999,7 +997,8 @@ async def admin_create_dialogue_start_config(
         try:
             start_dt = datetime.fromisoformat(start_at.replace("Z", "+00:00"))
             if start_dt.tzinfo is None:
-                start_dt = start_dt.replace(tzinfo=timezone.utc)
+                tz_name = getattr(app_settings, "event_timezone", "Europe/Moscow")
+                start_dt = start_dt.replace(tzinfo=ZoneInfo(tz_name)).astimezone(timezone.utc)
         except Exception:
             pass
     cfg = DialogueStartConfig(

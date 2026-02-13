@@ -214,7 +214,7 @@
                 const delay = (existingOpts[i] && existingOpts[i].delay_seconds) || 0;
                 reply_options.push({ text, next_id: nextId, delay_seconds: delay });
             }
-            if (reply_options.length === 0) reply_options.push({ text: 'Далее', next_id: null, delay_seconds: 0 });
+            // Не добавлять reply_options для конечных узлов (без исходящих связей)
             const nodeId = (dbId !== null && dbId !== undefined) ? dbId : ('new_' + (nextTempId--));
             rawNodes.push({
                 dfId, nodeId, d, v,
