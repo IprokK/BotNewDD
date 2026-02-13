@@ -279,6 +279,19 @@ class DialogueThreadUnlock(Base):
     unlocked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class DialogueTransitionTrigger(Base):
+    """Триггер перехода: при достижении сообщения — разблокировать другой диалог через N минут."""
+    __tablename__ = "dialogue_transition_triggers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), nullable=False)
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    source_message_id: Mapped[int] = mapped_column(ForeignKey("dialogue_messages.id", ondelete="CASCADE"), nullable=False)
+    target_thread_id: Mapped[int] = mapped_column(ForeignKey("dialogue_threads.id", ondelete="CASCADE"), nullable=False)
+    unlock_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class DialogueReply(Base):
     """Ответ участника на сообщение (для ветвления и условий)."""
     __tablename__ = "dialogue_replies"

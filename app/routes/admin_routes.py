@@ -1213,11 +1213,14 @@ async def admin_dialogue_graph_page(
         return RedirectResponse(url="/admin/dialogues", status_code=303)
     r = await db.execute(select(Station).where(Station.event_id == user.event_id))
     stations = r.scalars().all()
+    r = await db.execute(select(DialogueThread).where(DialogueThread.event_id == user.event_id, DialogueThread.id != thread_id))
+    other_threads = [{"id": t.id, "key": t.key, "title": t.title or t.key} for t in r.scalars().all()]
     import json
     stations_json = json.dumps([{"id": s.id, "name": s.name} for s in stations])
+    other_threads_json = json.dumps(other_threads, ensure_ascii=False)
     return templates.TemplateResponse(
         "admin/dialogue_graph.html",
-        {"request": request, "user": user, "thread": thread, "stations": stations, "stations_json": stations_json},
+        {"request": request, "user": user, "thread": thread, "stations": stations, "stations_json": stations_json, "other_threads_json": other_threads_json},
     )
 
 
@@ -1415,6 +1418,7 @@ async def admin_dialogue_graph_data(
         p = m.payload or {}
         x = p.get("pos_x") if p.get("pos_x") is not None else 50 + (m.order_index % 4) * 220
         y = p.get("pos_y") if p.get("pos_y") is not None else 50 + (m.order_index // 4) * 180
+        tr = (m.payload or {}).get("trigger_dialogue") or {}
         nodes.append({
             "id": m.id,
             "x": x,
@@ -1425,8 +1429,11 @@ async def admin_dialogue_graph_data(
             "gate_rules": m.gate_rules or {"condition_type": "immediate"},
             "order_index": m.order_index,
             "reply_options": [{"text": o.get("text", ""), "next_id": o.get("next_message_id"), "delay_seconds": o.get("delay_seconds", 0)} for o in opts],
+            "trigger_dialogue": tr,
         })
-    return {"nodes": nodes, "stations": stations, "thread_key": thread.key, "thread_title": thread.title or thread.key}
+    r = await db.execute(select(DialogueThread).where(DialogueThread.event_id == user.event_id, DialogueThread.id != thread_id))
+    other_threads = [{"id": t.id, "key": t.key, "title": t.title or t.key} for t in r.scalars().all()]
+    return {"nodes": nodes, "stations": stations, "thread_key": thread.key, "thread_title": thread.title or thread.key, "other_threads": other_threads}
 
 
 @router.post("/dialogues/{thread_id}/graph")
@@ -1464,6 +1471,12 @@ async def admin_dialogue_graph_save(
             payload["pos_x"] = int(n.get("x", 0))
         if n.get("y") is not None:
             payload["pos_y"] = int(n.get("y", 0))
+        tr = n.get("trigger_dialogue") or {}
+        if tr.get("thread_key") or tr.get("thread_id"):
+            payload["trigger_dialogue"] = {
+                "thread_key": str(tr.get("thread_key") or tr.get("thread_id") or ""),
+                "delay_minutes": int(tr.get("delay_minutes", 0)),
+            }
         opts = n.get("reply_options") or []
         payload["reply_options"] = [
             {"text": o.get("text", ""), "next_message_id": o.get("next_id"), "delay_seconds": int(o.get("delay_seconds") or 0)}

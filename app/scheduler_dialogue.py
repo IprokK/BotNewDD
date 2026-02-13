@@ -11,6 +11,7 @@ from app.models import (
     DialogueStartConfig,
     DialogueThread,
     DialogueThreadUnlock,
+    DialogueTransitionTrigger,
     Player,
     Team,
     TeamGroup,
@@ -168,4 +169,33 @@ async def process_dialogue_starts() -> None:
                 db.add(
                     DialogueThreadUnlock(thread_id=thread.id, team_id=tid)
                 )
+            await db.commit()
+
+
+async def process_dialogue_transitions() -> None:
+    """Обработать триггеры перехода в другой диалог (по достижении сообщения)."""
+    now = datetime.now(timezone.utc)
+    async with async_session_maker() as db:
+        r = await db.execute(
+            select(DialogueTransitionTrigger, DialogueThread).join(
+                DialogueThread, DialogueTransitionTrigger.target_thread_id == DialogueThread.id
+            ).where(DialogueTransitionTrigger.unlock_at <= now)
+        )
+        for trigger, thread in r.all():
+            r2 = await db.execute(
+                select(DialogueThreadUnlock).where(
+                    DialogueThreadUnlock.thread_id == thread.id,
+                    DialogueThreadUnlock.team_id == trigger.team_id,
+                )
+            )
+            if r2.scalar_one_or_none():
+                await db.delete(trigger)
+                await db.commit()
+                continue
+            r3 = await db.execute(select(Player).where(Player.team_id == trigger.team_id))
+            for p in r3.scalars().all():
+                if p.tg_id:
+                    await notify_dialogue_unlocked(p.tg_id, thread.title or thread.key)
+            db.add(DialogueThreadUnlock(thread_id=thread.id, team_id=trigger.team_id))
+            await db.delete(trigger)
             await db.commit()

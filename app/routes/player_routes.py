@@ -18,6 +18,7 @@ from app.models import (
     DialogueStartConfig,
     DialogueThread,
     DialogueThreadUnlock,
+    DialogueTransitionTrigger,
     Player,
     Rating,
     RegistrationForm,
@@ -479,18 +480,65 @@ async def dialogue_view(
         pending_reply = m
         break
 
-    # Вычисляем show_delay и delete_after для каждого сообщения
+    default_typing = int((thread.config or {}).get("default_typing_delay", 2))
     cumulative = 0
     enriched = []
     for m in visible:
         rules = m.gate_rules or {}
-        delay_prev = rules.get("delay_after_previous_seconds") or 0
+        delay_prev = rules.get("delay_after_previous_seconds")
+        if delay_prev is None or delay_prev == 0:
+            delay_prev = default_typing
         show_delay = cumulative
         cumulative += delay_prev
         delete_after = (m.payload or {}).get("delete_after_seconds") or 0
         enriched.append({"msg": m, "show_delay_seconds": show_delay, "delete_after_seconds": delete_after})
 
     characters = ((thread.config or {}).get("characters") or {})
+
+    # Триггеры перехода: при достижении сообщения с trigger_dialogue — запланировать разблокировку другого диалога
+    if user.team_id:
+        for m in visible:
+            tr = (m.payload or {}).get("trigger_dialogue") or {}
+            target_key = tr.get("thread_key") or tr.get("thread_id")
+            delay_min = int(tr.get("delay_minutes", 0))
+            if not target_key or delay_min < 0:
+                continue
+            if isinstance(target_key, int) or (isinstance(target_key, str) and str(target_key).isdigit()):
+                r_tr = await db.execute(
+                    select(DialogueThread).where(
+                        DialogueThread.id == int(target_key),
+                        DialogueThread.event_id == user.event_id,
+                    )
+                )
+            else:
+                r_tr = await db.execute(
+                    select(DialogueThread).where(
+                        DialogueThread.key == str(target_key),
+                        DialogueThread.event_id == user.event_id,
+                    )
+                )
+            target_thread = r_tr.scalar_one_or_none()
+            if not target_thread or target_thread.id == thread.id:
+                continue
+            r_ex = await db.execute(
+                select(DialogueTransitionTrigger).where(
+                    DialogueTransitionTrigger.team_id == user.team_id,
+                    DialogueTransitionTrigger.source_message_id == m.id,
+                    DialogueTransitionTrigger.target_thread_id == target_thread.id,
+                )
+            )
+            if r_ex.scalar_one_or_none():
+                continue
+            from datetime import timedelta
+            unlock_at = datetime.now(timezone.utc) + timedelta(minutes=delay_min)
+            db.add(DialogueTransitionTrigger(
+                event_id=user.event_id,
+                team_id=user.team_id,
+                source_message_id=m.id,
+                target_thread_id=target_thread.id,
+                unlock_at=unlock_at,
+            ))
+            await db.commit()
 
     # Опции ответа только с валидным next_message_id (конечные узлы графа без связей не показываем как «выбор»)
     pending_reply_opts = []
@@ -598,11 +646,13 @@ async def dialogue_reply(
                 break
             curr = msgs_by_id_local[nid]
             chain.append(curr)
-        form_delay = max(0, int(delay_seconds or 0))
+        default_typing = int((thread.config or {}).get("default_typing_delay", 2))
+        form_delay = max(0, int(delay_seconds or 0)) or default_typing
         cum_delay = 0
         parts = []
         for i, msg in enumerate(chain):
-            cum_delay = form_delay if i == 0 else cum_delay + int(((chain[i - 1].payload or {}).get("reply_options") or [{}])[0].get("delay_seconds", 0))
+            raw = 0 if i == 0 else int(((chain[i - 1].payload or {}).get("reply_options") or [{}])[0].get("delay_seconds", 0))
+            cum_delay = form_delay if i == 0 else cum_delay + (raw if raw else default_typing)
             add_opts = i == len(chain) - 1
             bb = _render_in_msg(msg, add_opts=add_opts)
             if cum_delay > 0:
@@ -639,9 +689,7 @@ async def dialogue_reply(
                         out_bubble = f'<div class="msg-row out"><div class="msg-avatar">Я</div><div class="msg-bubble"><div class="sender">Вы</div>{html.escape(message)}</div></div>'
                         return HTMLResponse(out_bubble + next_bubble)
     out_bubble = f'<div class="msg-row out"><div class="msg-avatar">Я</div><div class="msg-bubble"><div class="sender">Вы</div>{html.escape(message)}</div></div>'
-    return HTMLResponse(
-        out_bubble + '<div class="msg-row in"><div class="msg-avatar">—</div><div class="msg-bubble"><div class="sender">—</div>Нет ответа на это сообщение</div></div>'
-    )
+    return HTMLResponse(out_bubble)
 
 
 @router.get("/player/rating", response_class=HTMLResponse)

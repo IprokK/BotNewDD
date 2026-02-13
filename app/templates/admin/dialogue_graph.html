@@ -88,6 +88,14 @@
                 <div id="reply-options-list"></div>
                 <button type="button" id="btn-add-reply" style="margin-top:8px;font-size:0.85rem;">+ Вариант ответа</button>
             </div>
+            <div class="form-group">
+                <label>Переход в другой диалог</label>
+                <p style="font-size:0.8rem;color:var(--admin-muted);margin-bottom:8px;">При достижении этого сообщения — через N минут разблокировать диалог:</p>
+                <select id="edit-trigger-thread" style="margin-bottom:8px;">
+                    <option value="">— Нет перехода —</option>
+                </select>
+                <input type="number" id="edit-trigger-delay" placeholder="Минут" min="0" max="1440" style="width:80px;" title="Через сколько минут разблокировать">
+            </div>
         </div>
     </div>
 </div>
@@ -97,6 +105,7 @@
 (function() {
     const threadId = {{ thread.id }};
     const stations = {{ stations_json | safe }};
+    let otherThreads = {{ other_threads_json | default('[]') | safe }};
 
     const container = document.getElementById('drawflow');
     const editor = new Drawflow(container);
@@ -147,9 +156,25 @@
     const nodeToId = {};
     let nextTempId = -1;
 
+    function fillTriggerThreadSelect() {
+        const sel = document.getElementById('edit-trigger-thread');
+        if (!sel) return;
+        const cur = sel.value;
+        sel.innerHTML = '<option value="">— Нет перехода —</option>';
+        (otherThreads || []).forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.key || t.id;
+            opt.textContent = (t.title || t.key) + ' (' + (t.key || t.id) + ')';
+            sel.appendChild(opt);
+        });
+        if (cur) sel.value = cur;
+    }
+
     async function loadGraph() {
         const r = await fetch('/admin/dialogues/' + threadId + '/graph/data');
         const g = await r.json();
+        if (g.other_threads) otherThreads = g.other_threads;
+        fillTriggerThreadSelect();
         editor.clear();
         idToNode.length = 0;
         Object.keys(idToNode).forEach(k => delete idToNode[k]);
@@ -230,6 +255,7 @@
             audience: d.audience || 'TEAM',
             gate_rules: d.gate_rules || { condition_type: 'immediate' },
             reply_options,
+            trigger_dialogue: d.trigger_dialogue || {},
         }));
         return { nodes };
     }
@@ -272,6 +298,11 @@
         document.getElementById('edit-scheduled').value = (gr.scheduled_at || '').toString().slice(0, 16);
         document.getElementById('edit-station').value = gr.station_id || '';
         document.getElementById('edit-after-msg').value = gr.after_message_id || '';
+        const tr = d.trigger_dialogue || {};
+        const trSel = document.getElementById('edit-trigger-thread');
+        const trDelay = document.getElementById('edit-trigger-delay');
+        if (trSel) trSel.value = tr.thread_key || tr.thread_id || '';
+        if (trDelay) trDelay.value = tr.delay_minutes || 0;
         document.getElementById('node-preview').textContent = (d.text || '').substring(0, 100) + ((d.text||'').length > 100 ? '…' : '');
         document.querySelectorAll('.cond-extra').forEach(el => el.classList.remove('show'));
         const cond = document.getElementById('edit-condition').value;
@@ -350,6 +381,9 @@
         if (gr.condition_type === 'scheduled') gr.scheduled_at = document.getElementById('edit-scheduled').value;
         if (gr.condition_type === 'after_station') gr.station_id = parseInt(document.getElementById('edit-station').value, 10) || null;
         if (gr.condition_type === 'after_message') gr.after_message_id = parseInt(document.getElementById('edit-after-msg').value, 10) || null;
+        const trSel = document.getElementById('edit-trigger-thread');
+        const trDelay = document.getElementById('edit-trigger-delay');
+        const trigger = (trSel && trSel.value) ? { thread_key: trSel.value, delay_minutes: (trDelay ? parseInt(trDelay.value, 10) : 0) || 0 } : {};
         const newData = {
             ...node.data,
             character: document.getElementById('edit-character').value,
@@ -357,6 +391,7 @@
             text: document.getElementById('edit-text').value,
             gate_rules: gr,
             reply_options: node.data.reply_options || [],
+            trigger_dialogue: trigger,
         };
         editor.updateNodeDataFromId(selectedNodeId, newData);
         updateNodeView(selectedNodeId);
@@ -373,9 +408,24 @@
         if (v === 'after_message') document.getElementById('cond-message').classList.add('show');
         applySidebarToNode();
     });
-    document.getElementById('edit-scheduled').addEventListener('change', applySidebarToNode);
-    document.getElementById('edit-station').addEventListener('change', applySidebarToNode);
-    document.getElementById('edit-after-msg').addEventListener('change', applySidebarToNode);
+        document.getElementById('edit-scheduled').addEventListener('change', applySidebarToNode);
+        document.getElementById('edit-station').addEventListener('change', applySidebarToNode);
+        document.getElementById('edit-after-msg').addEventListener('change', applySidebarToNode);
+        document.getElementById('edit-trigger-thread').addEventListener('change', applyTriggerToNode);
+        document.getElementById('edit-trigger-delay').addEventListener('change', applyTriggerToNode);
+
+    function applyTriggerToNode() {
+        if (selectedNodeId == null) return;
+        const node = editor.getNodeFromId(selectedNodeId);
+        if (!node || !node.data) return;
+        const threadSel = document.getElementById('edit-trigger-thread');
+        const delayInp = document.getElementById('edit-trigger-delay');
+        const threadVal = threadSel ? threadSel.value : '';
+        const delayVal = delayInp ? (parseInt(delayInp.value, 10) || 0) : 0;
+        const trigger = threadVal ? { thread_key: threadVal, delay_minutes: delayVal } : {};
+        const newData = { ...node.data, trigger_dialogue: trigger };
+        editor.updateNodeDataFromId(selectedNodeId, newData);
+    }
 
     document.getElementById('btn-add-reply').onclick = () => {
         if (selectedNodeId == null) return;
