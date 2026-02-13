@@ -216,7 +216,12 @@ class DialogueThread(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     event = relationship("Event", back_populates="dialogue_threads")
-    messages = relationship("DialogueMessage", back_populates="thread", order_by="DialogueMessage.order_index")
+    messages = relationship(
+        "DialogueMessage",
+        back_populates="thread",
+        order_by="DialogueMessage.order_index",
+        cascade="all, delete-orphan",
+    )
 
 
 class DialogueMessage(Base):

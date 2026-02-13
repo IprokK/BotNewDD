@@ -1177,8 +1177,13 @@ async def admin_delete_dialogue(
     user: UserContext = Depends(require_admin),
 ):
     from fastapi.responses import Response
+    from sqlalchemy import delete
+    from app.models import DialogueTransitionTrigger, DialogueScheduledDelivery
+
     r = await db.execute(
-        select(DialogueThread).where(
+        select(DialogueThread)
+        .options(selectinload(DialogueThread.messages))
+        .where(
             DialogueThread.id == thread_id,
             DialogueThread.event_id == user.event_id,
         )
@@ -1186,6 +1191,15 @@ async def admin_delete_dialogue(
     t = r.scalar_one_or_none()
     if not t:
         return Response(status_code=404)
+    # Удаляем связанные записи вручную (избегаем FK-ошибок)
+    msg_ids = [m.id for m in t.messages]
+    await db.execute(delete(DialogueTransitionTrigger).where(DialogueTransitionTrigger.target_thread_id == thread_id))
+    if msg_ids:
+        await db.execute(delete(DialogueTransitionTrigger).where(DialogueTransitionTrigger.source_message_id.in_(msg_ids)))
+        await db.execute(delete(DialogueScheduledDelivery).where(DialogueScheduledDelivery.message_id.in_(msg_ids)))
+        await db.execute(delete(DialogueReply).where(DialogueReply.message_id.in_(msg_ids)))
+    await db.execute(delete(DialogueStartConfig).where(DialogueStartConfig.thread_id == thread_id))
+    await db.execute(delete(DialogueThreadUnlock).where(DialogueThreadUnlock.thread_id == thread_id))
     await db.delete(t)
     await db.flush()
     return Response(content="", status_code=200)
@@ -1243,7 +1257,7 @@ async def admin_dialogue_edit(
     if not thread:
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url="/admin/dialogues", status_code=303)
-    msgs = sorted(thread.messages, key=lambda m: m.order_index)
+    msgs = sorted(thread.messages, key=lambda m: (m.order_index if m.order_index is not None else 999999, m.id))
     r = await db.execute(select(Station).where(Station.event_id == user.event_id))
     stations = r.scalars().all()
     import json
@@ -1413,7 +1427,7 @@ async def admin_dialogue_graph_data(
     r = await db.execute(select(Station).where(Station.event_id == user.event_id))
     stations = [{"id": s.id, "name": s.name} for s in r.scalars().all()]
     nodes = []
-    for m in sorted(thread.messages, key=lambda x: x.order_index):
+    for m in sorted(thread.messages, key=lambda x: (x.order_index if x.order_index is not None else 999999, x.id)):
         opts = (m.payload or {}).get("reply_options") or []
         p = m.payload or {}
         x = p.get("pos_x") if p.get("pos_x") is not None else 50 + (m.order_index % 4) * 220

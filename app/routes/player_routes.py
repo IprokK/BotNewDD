@@ -47,8 +47,26 @@ async def _get_dialogue_visibility(db: AsyncSession, event_id: int, team_id: int
     return (with_config, unlocked)
 
 
-def _thread_visible(thread_id: int, with_config: set[int], unlocked: set[int]) -> bool:
+def _thread_visible(thread_id: int, thread_type: str, with_config: set[int], unlocked: set[int]) -> bool:
+    """Диалог виден: LEAKED — если нет правила или разблокирован; INTERACTIVE — только если есть правило И разблокирован."""
+    if (thread_type or "").upper() == "INTERACTIVE":
+        return thread_id in with_config and thread_id in unlocked
     return thread_id not in with_config or thread_id in unlocked
+
+
+def _normalize_role(role: str | None) -> str:
+    """Привести роль к ROLE_A или ROLE_B."""
+    if not role:
+        return "ROLE_A"
+    r = str(role).upper().replace("ROLE_", "")
+    return "ROLE_B" if r == "B" else "ROLE_A"
+
+
+def _thread_has_content_for_role(thread, role: str) -> bool:
+    """Есть ли в диалоге хотя бы одно сообщение для этой роли (TEAM или совпадение по роли)."""
+    from app.models import ContentAudience
+    allowed = {ContentAudience.TEAM.value, role}
+    return any((m.audience or ContentAudience.TEAM.value) in allowed for m in (thread.messages or []))
 
 
 @router.get("/player", response_class=HTMLResponse)
@@ -94,9 +112,15 @@ async def player_dashboard(
     )
     all_threads = list(r.scalars().all())
     with_cfg, unlocked = await _get_dialogue_visibility(db, user.event_id, user.team_id)
-    threads = [t for t in all_threads if _thread_visible(t.id, with_cfg, unlocked)]
+    r = await db.execute(select(Player).where(Player.id == user.player_id))
+    player_for_role = r.scalar_one_or_none()
+    role = _normalize_role(player_for_role.role if player_for_role else None)
+    threads = [
+        t for t in all_threads
+        if _thread_visible(t.id, t.type or "", with_cfg, unlocked) and _thread_has_content_for_role(t, role)
+    ]
     for t in threads:
-        ms_sorted = sorted(t.messages, key=lambda x: x.order_index)
+        ms_sorted = sorted(t.messages, key=lambda x: (x.order_index if x.order_index is not None else 999999, x.id))
         first = next((m for m in ms_sorted if (m.payload or {}).get("text")), None)
         txt = (first.payload or {}).get("text", "") if first else ""
         t.preview = (txt[:60] + "…") if len(txt) > 60 else (txt or "")
@@ -306,9 +330,15 @@ async def dialogues_list(
     )
     all_threads = list(r.scalars().all())
     with_cfg, unlocked = await _get_dialogue_visibility(db, user.event_id, user.team_id)
-    threads = [t for t in all_threads if _thread_visible(t.id, with_cfg, unlocked)]
+    rp = await db.execute(select(Player).where(Player.id == user.player_id))
+    player = rp.scalar_one_or_none()
+    role = _normalize_role(player.role if player else None)
+    threads = [
+        t for t in all_threads
+        if _thread_visible(t.id, t.type or "", with_cfg, unlocked) and _thread_has_content_for_role(t, role)
+    ]
     for t in threads:
-        ms_sorted = sorted(t.messages, key=lambda x: x.order_index)
+        ms_sorted = sorted(t.messages, key=lambda x: (x.order_index if x.order_index is not None else 999999, x.id))
         first = next((m for m in ms_sorted if (m.payload or {}).get("text")), None)
         txt = (first.payload or {}).get("text", "") if first else ""
         t.preview = (txt[:60] + "…") if len(txt) > 60 else (txt or None)
@@ -319,8 +349,6 @@ async def dialogues_list(
     if user.team_id:
         r = await db.execute(select(Team).where(Team.id == user.team_id))
         team = r.scalar_one_or_none()
-    rp = await db.execute(select(Player).where(Player.id == user.player_id))
-    player = rp.scalar_one_or_none()
     player_role = (player.role or "A").replace("ROLE_", "") if player else "—"
     return templates.TemplateResponse(
         "player/dialogues_list.html",
@@ -394,7 +422,7 @@ async def dialogue_view(
         )
 
     with_cfg, unlocked = await _get_dialogue_visibility(db, user.event_id, user.team_id)
-    if not _thread_visible(thread.id, with_cfg, unlocked):
+    if not _thread_visible(thread.id, thread.type or "", with_cfg, unlocked):
         return templates.TemplateResponse(
             "player/error.html",
             {"request": request, "message": "Этот диалог ещё недоступен для вашей команды"},
@@ -403,7 +431,14 @@ async def dialogue_view(
 
     rp = await db.execute(select(Player).where(Player.id == user.player_id))
     player = rp.scalar_one_or_none()
-    role = (player.role if player else None) or "ROLE_A"
+    role = _normalize_role(player.role if player else None)
+    if not _thread_has_content_for_role(thread, role):
+        return templates.TemplateResponse(
+            "player/error.html",
+            {"request": request, "message": "Этот диалог не предназначен для вашей роли"},
+            status_code=403,
+        )
+
     r = await db.execute(select(Team).where(Team.id == user.team_id)) if user.team_id else None
     team = r.scalar_one_or_none() if r else None
 
@@ -664,7 +699,7 @@ async def dialogue_reply(
         out_bubble = f'<div class="msg-row out"><div class="msg-avatar">Я</div><div class="msg-bubble"><div class="sender">Вы</div>{html.escape(message)}</div></div>'
         return HTMLResponse(out_bubble + next_bubbles)
 
-    for m in sorted(thread.messages, key=lambda x: x.order_index):
+    for m in sorted(thread.messages, key=lambda x: (x.order_index if x.order_index is not None else 999999, x.id)):
         opts = (m.payload or {}).get("reply_options") or []
         for o in opts:
             if o.get("text", "").strip().lower() == message.strip().lower():
