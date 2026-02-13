@@ -152,6 +152,10 @@ async def player_dashboard(
     player_role = (player.role or "A").replace("ROLE_", "") if player else "—"
     inventory = list((player.player_progress or {}).get("inventory") or [])
 
+    # Контент дневника по роли (для предмета «Личный дневник»)
+    from app.diary_content import get_diary_for_role
+    diary_subtitle, diary_content = get_diary_for_role(player_role)
+
     # Все станции и посещённые — для маршрутного листа
     r = await db.execute(
         select(Station).where(Station.event_id == user.event_id).order_by(Station.name)
@@ -217,6 +221,8 @@ async def player_dashboard(
             "all_stations": all_stations,
             "visited_station_ids": visited_station_ids,
             "current_station_id": current_station_id,
+            "diary_subtitle": diary_subtitle,
+            "diary_content": diary_content,
         },
     )
 
