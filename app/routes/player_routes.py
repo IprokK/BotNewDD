@@ -429,41 +429,55 @@ async def dialogue_view(
     check = lambda m: _check_conditions(m, user, player, user.team_id, replied_ids, visited_station_ids, team_progress, thread.key)
 
     msgs_by_id = {m.id: m for m in thread.messages}
-    visible = []
+    # Карта входящих: кто указывает на это сообщение через reply_options
+    incoming: dict[int, list[int]] = {mid: [] for mid in msgs_by_id}
+    for m in thread.messages:
+        for o in (m.payload or {}).get("reply_options") or []:
+            nid = o.get("next_message_id")
+            if nid and nid in msgs_by_id:
+                incoming.setdefault(nid, []).append(m.id)
+    # Стартовые узлы — без входящих рёбер
+    start_candidates = [m for m in thread.messages if not incoming.get(m.id)]
+    start_id = min(start_candidates, key=lambda x: x.order_index).id if start_candidates else min(msgs_by_id, key=lambda mid: msgs_by_id[mid].order_index)
+
+    visible: list = []
     pending_reply = None
-    i = 0
-    messages_sorted = sorted(thread.messages, key=lambda x: x.order_index)
-    while i < len(messages_sorted):
-        m = messages_sorted[i]
-        if m.audience not in (ContentAudience.TEAM.value, role):
-            i += 1
+    queue: list[int] = [start_id]
+    visited: set[int] = set()
+    replies_by_msg: dict[int, int] = {}  # message_id -> chosen next_message_id
+    r_replies = await db.execute(
+        select(DialogueReply.message_id, DialogueReply.next_message_id).where(
+            DialogueReply.player_id == user.player_id,
+            DialogueReply.event_id == user.event_id,
+        )
+    )
+    for row in r_replies.all():
+        replies_by_msg[row[0]] = row[1]
+
+    while queue:
+        mid = queue.pop(0)
+        if mid in visited:
             continue
-        if not check(m):
-            i += 1
+        visited.add(mid)
+        m = msgs_by_id.get(mid)
+        if not m or m.audience not in (ContentAudience.TEAM.value, role) or not check(m):
             continue
         visible.append(m)
-        opts = (m.payload or {}).get("reply_options") or []
-        if opts:
-            if m.id in replied_ids:
-                r = await db.execute(
-                    select(DialogueReply).where(
-                        DialogueReply.message_id == m.id,
-                        DialogueReply.player_id == user.player_id,
-                    ).order_by(DialogueReply.replied_at.desc()).limit(1)
-                )
-                rep = r.scalar_one_or_none()
-                if rep and rep.next_message_id and rep.next_message_id in msgs_by_id:
-                    next_m = msgs_by_id[rep.next_message_id]
-                    if next_m not in visible and next_m.audience in (ContentAudience.TEAM.value, role):
-                        if check(next_m):
-                            visible.append(next_m)
-                            idx = messages_sorted.index(next_m) if next_m in messages_sorted else i + 1
-                            i = idx + 1
-                            continue
-            else:
-                pending_reply = m
-                break
-        i += 1
+        opts = [o for o in ((m.payload or {}).get("reply_options") or []) if o.get("next_message_id")]
+        if not opts:
+            continue
+        if len(opts) == 1:
+            next_id = opts[0].get("next_message_id")
+            if next_id and next_id not in visited:
+                queue.insert(0, next_id)
+            continue
+        if m.id in replied_ids and replies_by_msg.get(m.id):
+            next_id = replies_by_msg[m.id]
+            if next_id and next_id in msgs_by_id and next_id not in visited:
+                queue.insert(0, next_id)
+            continue
+        pending_reply = m
+        break
 
     # Вычисляем show_delay и delete_after для каждого сообщения
     cumulative = 0
@@ -572,12 +586,33 @@ async def dialogue_reply(
         return f'<div class="msg-row in"{da}><div class="msg-avatar">{av_inner}</div><div class="msg-bubble"><div class="sender">{html.escape(sender)}</div>{html.escape(text)}{opts_html}</div></div>'
 
     if next_msg:
-        delay = max(0, int(delay_seconds or 0))
-        next_bubble = _render_in_msg(next_msg)
-        if delay > 0:
-            next_bubble = f'<div class="msg-delayed" data-delay-seconds="{delay}" style="opacity:0;animation:fadeInMsg 0.3s {delay}s forwards;">{next_bubble}</div><style>@keyframes fadeInMsg{{to{{opacity:1;}}}}</style>'
+        msgs_by_id_local = {mm.id: mm for mm in thread.messages}
+        chain: list = [next_msg]
+        curr = next_msg
+        while True:
+            opts = [o for o in ((curr.payload or {}).get("reply_options") or []) if o.get("next_message_id")]
+            if len(opts) != 1:
+                break
+            nid = opts[0].get("next_message_id")
+            if not nid or nid not in msgs_by_id_local:
+                break
+            curr = msgs_by_id_local[nid]
+            chain.append(curr)
+        form_delay = max(0, int(delay_seconds or 0))
+        cum_delay = 0
+        parts = []
+        for i, msg in enumerate(chain):
+            cum_delay = form_delay if i == 0 else cum_delay + int(((chain[i - 1].payload or {}).get("reply_options") or [{}])[0].get("delay_seconds", 0))
+            add_opts = i == len(chain) - 1
+            bb = _render_in_msg(msg, add_opts=add_opts)
+            if cum_delay > 0:
+                bb = f'<div class="msg-delayed" data-delay-seconds="{cum_delay}" data-delete-after="0" style="opacity:0;animation:fadeInMsg 0.3s {cum_delay}s forwards;">{bb}</div>'
+            parts.append(bb)
+        next_bubbles = "".join(parts)
+        if form_delay > 0 or any(((m.payload or {}).get("reply_options") or [{}])[0].get("delay_seconds") for m in chain[:-1]):
+            next_bubbles = next_bubbles + '<style>@keyframes fadeInMsg{to{opacity:1;}}</style>'
         out_bubble = f'<div class="msg-row out"><div class="msg-avatar">Я</div><div class="msg-bubble"><div class="sender">Вы</div>{html.escape(message)}</div></div>'
-        return HTMLResponse(out_bubble + next_bubble)
+        return HTMLResponse(out_bubble + next_bubbles)
 
     for m in sorted(thread.messages, key=lambda x: x.order_index):
         opts = (m.payload or {}).get("reply_options") or []

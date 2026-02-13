@@ -301,7 +301,7 @@
             const delayInp = div.querySelector('.reply-delay');
             if (delayInp) delayInp.onchange = () => applyReplyOptFromSidebar();
             if (div.querySelector('button')) div.querySelector('button').onclick = () => {
-                if (opts.length > 1 && selectedNodeId != null) {
+                if (selectedNodeId != null && opts.length >= 1) {
                     opts.splice(i, 1);
                     const node = editor.getNodeFromId(selectedNodeId);
                     if (node && node.data) {
