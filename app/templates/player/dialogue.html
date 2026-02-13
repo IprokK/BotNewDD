@@ -124,6 +124,7 @@
         <div class="msg-avatar">{% if avatar_url %}<img src="{{ avatar_url }}" alt="">{% else %}{{ char_name[1:2] if char_name.startswith('@') else char_name[:1] }}{% endif %}</div>
         <div class="msg-bubble">
             {% if char_name %}<div class="sender">{{ char_name }}</div>{% endif %}
+            {% if m.payload.get('image') %}<img src="{{ m.payload.get('image') }}" alt="" style="max-width:100%;border-radius:8px;margin-bottom:8px;display:block;">{% endif %}
             {{ m.payload.get('text', m.payload) }}
         </div>
     </div>

@@ -24,6 +24,16 @@
     .diary-nav { flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 16px; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--border); font-size: 0.85rem; color: var(--muted); }
     .diary-nav button { padding: 8px 16px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm); cursor: pointer; font-family: inherit; font-size: 0.9rem; }
     .diary-nav button:disabled { opacity: 0.4; cursor: not-allowed; }
+    /* Фото-предмет: flip card */
+    .photo-flip { perspective: 1000px; width: 100%; max-width: 320px; margin: 0 auto; }
+    .photo-flip-inner { position: relative; width: 100%; padding-bottom: 140%; transform-style: preserve-3d; transition: transform 0.6s; }
+    .photo-flip.flipped .photo-flip-inner { transform: rotateY(180deg); }
+    .photo-flip-face { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+    .photo-flip-front { background: #000; }
+    .photo-flip-front img { width: 100%; height: 100%; object-fit: contain; }
+    .photo-flip-back { background: #fff; transform: rotateY(180deg); padding: 24px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+    .photo-flip-back .signature { font-family: 'Caveat', cursive; font-size: 1.5rem; line-height: 1.4; color: #333; text-align: center; }
+    .photo-flip-back .date { position: absolute; bottom: 16px; right: 16px; font-family: 'Caveat', cursive; font-size: 1.1rem; color: #666; }
 </style>
 {% endblock %}
 {% block team_name %}{{ team.name if team else '—' }}{% endblock %}
@@ -66,6 +76,12 @@
             <div class="item-icon">📱</div>
             <div class="item-name">Чужой телефон</div>
             <div class="item-desc">Архив переписок</div>
+        </div>
+        {% elif item_key in photo_items_map %}
+        <div class="item-card" onclick="openItem('{{ item_key }}')">
+            <div class="item-icon">🖼️</div>
+            <div class="item-name">Фотография</div>
+            <div class="item-desc">Нажмите, чтобы развернуть</div>
         </div>
         {% endif %}
         {% endfor %}
@@ -269,6 +285,28 @@
         <p style="color:var(--muted);">Рецепты и заклинания откроются на станциях</p>
     </div>
 </div>
+{% for pk, pdata in photo_items_map.items() %}
+<div id="item-{{ pk }}" class="screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:200;display:none;flex-direction:column;overflow-y:auto;">
+    <div style="padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:12px;">
+        <button onclick="closeItem()" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;border-radius:50%;cursor:pointer;font-size:1.2rem;color:var(--accent);">←</button>
+        <h2 style="margin:0;font-size:1.1rem;">Фотография</h2>
+    </div>
+    <div style="flex:1;padding:24px;display:flex;flex-direction:column;align-items:center;">
+        <p style="font-size:0.9rem;color:var(--muted);margin-bottom:16px;">Нажмите, чтобы перевернуть</p>
+        <div class="photo-flip" id="photo-flip-{{ pk }}" onclick="this.classList.toggle('flipped')">
+            <div class="photo-flip-inner">
+                <div class="photo-flip-face photo-flip-front">
+                    <img src="{{ pdata.image_url }}" alt="">
+                </div>
+                <div class="photo-flip-face photo-flip-back">
+                    <div class="signature">{{ pdata.signature }}</div>
+                    <div class="date">{{ pdata.date }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
 <div id="item-other_phone" class="screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--surface);z-index:200;display:none;overflow-y:auto;">
     <div style="padding:16px;padding-top:50px;">
         <button onclick="closeItem()" style="margin-bottom:16px;padding:8px 16px;background:var(--border);border:none;border-radius:var(--radius-sm);cursor:pointer;">← Назад</button>
@@ -333,7 +371,7 @@
     });
     window.openItem = function(id) {
         const el = document.getElementById('item-' + id);
-        el.style.display = (id === 'phone' || id === 'diary') ? 'flex' : 'block';
+        if (el) el.style.display = (id === 'phone' || id === 'diary' || (typeof id === 'string' && id.startsWith('photo_'))) ? 'flex' : 'block';
         if (id === 'diary') {
             const wrap = document.getElementById('diary-pages-wrap');
             if (wrap) { wrap.scrollLeft = 0; }
@@ -413,6 +451,7 @@
             const data = await r.json();
             if (data.ok) {
                 const itemNames = { diary: 'Личный дневник', witch: 'Методичка ведьмы', other_phone: 'Чужой телефон' };
+                if (!itemNames[data.item_key] && (data.item_key || '').startsWith('photo_')) itemNames[data.item_key] = 'Фотография';
                 const name = itemNames[data.item_key] || data.item_key;
                 resultDiv.innerHTML = '<div style="padding:16px;background:var(--success,#4a7c59);color:#fff;border-radius:var(--radius);margin-bottom:12px;">✅ Получено: ' + name + '</div><p style="color:var(--muted);">Обновите страницу — предмет появится в инвентаре</p><button onclick="window.location.reload()" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;">Обновить</button>';
             } else {

@@ -401,6 +401,21 @@ class ScanCode(Base):
     event = relationship("Event", back_populates="scan_codes")
 
 
+class PhotoItem(Base):
+    """Фото-предмет: изображение с оборотной стороной (подпись, дата)."""
+    __tablename__ = "photo_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), nullable=False)
+    item_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    image_url: Mapped[str] = mapped_column(String(512), nullable=False)
+    back_signature: Mapped[str] = mapped_column(String(255), default="")
+    back_date: Mapped[str] = mapped_column(String(100), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("event_id", "item_key", name="uq_photo_items_event_key"),)
+
+
 class EventUser(Base):
     """Maps tg_id + event_id to role (PLAYER, STATION_HOST, ADMIN, SUPERADMIN)."""
     __tablename__ = "event_users"

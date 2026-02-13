@@ -1,0 +1,49 @@
+{% extends "admin/base.html" %}
+{% block title %}Фотографии-предметы{% endblock %}
+{% block content %}
+<h2>Фотографии (предметы по QR)</h2>
+<p style="color:var(--admin-muted);">Создайте фотографии. Затем создайте QR-код с соответствующим item_key в разделе «QR предметы».</p>
+
+<div class="card">
+    <h3>Добавить фотографию</h3>
+    <form method="post" action="/admin/photo-items" enctype="multipart/form-data" style="display:flex;flex-direction:column;gap:12px;max-width:400px;">
+        <div>
+            <label>Ключ (item_key, напр. photo_1)</label>
+            <input type="text" name="item_key" placeholder="photo_1" required style="width:100%;">
+        </div>
+        <div>
+            <label>Изображение (лицевая сторона)</label>
+            <input type="file" name="image" accept="image/*" required>
+        </div>
+        <div>
+            <label>Подпись (оборотная сторона, от руки)</label>
+            <input type="text" name="back_signature" placeholder="С любовью, Марк">
+        </div>
+        <div>
+            <label>Дата (оборотная сторона, угол)</label>
+            <input type="text" name="back_date" placeholder="10 января 2025">
+        </div>
+        <button type="submit">Создать</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Список фотографий</h3>
+    {% for p in photo_items %}
+    <div style="padding:16px 0;border-bottom:1px solid var(--admin-border);display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+        <div style="width:80px;height:80px;background:var(--admin-bg);border-radius:8px;overflow:hidden;">
+            {% if p.image_url %}<img src="{{ p.image_url }}" alt="" style="width:100%;height:100%;object-fit:cover;">{% else %}—{% endif %}
+        </div>
+        <div style="flex:1;min-width:200px;">
+            <strong>{{ p.item_key }}</strong>
+            <div style="font-size:0.85rem;color:var(--admin-muted);">Подпись: {{ p.back_signature or '—' }} | Дата: {{ p.back_date or '—' }}</div>
+        </div>
+        <form method="post" action="/admin/photo-items/{{ p.id }}/delete" style="display:inline;" onsubmit="return confirm('Удалить?');">
+            <button type="submit" style="background:#8b2635;">Удалить</button>
+        </form>
+    </div>
+    {% else %}
+    <p style="color:var(--admin-muted);">Нет фотографий</p>
+    {% endfor %}
+</div>
+{% endblock %}

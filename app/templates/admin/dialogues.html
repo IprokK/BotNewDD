@@ -20,6 +20,10 @@
         <div><label style="display:block;margin-bottom:4px;color:var(--admin-muted);font-size:0.85rem;">Тип</label>
             <select name="type"><option value="LEAKED">LEAKED</option><option value="INTERACTIVE">INTERACTIVE</option></select>
         </div>
+        <div><label style="display:block;margin-bottom:4px;color:var(--admin-muted);font-size:0.85rem;">Роли (кому показывать)</label>
+            <select name="target_roles" multiple style="min-height:38px;"><option value="ROLE_A">Роль A</option><option value="ROLE_B">Роль B</option></select>
+            <small style="color:var(--admin-muted);">Выберите обе или одну — пусто = обе</small>
+        </div>
         <button type="submit">Создать</button>
     </form>
 </div>
@@ -32,6 +36,7 @@
             <a href="/admin/dialogues/{{ t.id }}/graph" style="display:flex;align-items:center;gap:8px;">
                 <strong>{{ t.title or t.key }}</strong>
                 <span class="badge">{{ t.type }}</span>
+                <span class="badge" style="background:var(--admin-accent);color:#fff;">{{ (t.config or {}).get('target_roles') or ['A','B'] }}</span>
                 <small style="color:var(--admin-muted);"> — {{ t.messages|length }} сообщ.</small>
             </a>
             <a href="/admin/dialogues/{{ t.id }}" style="color:var(--admin-muted);font-size:0.85rem;">список</a>

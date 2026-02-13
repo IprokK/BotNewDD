@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -23,6 +23,7 @@ from app.models import (
     Event,
     EventLog,
     EventUser,
+    PhotoItem,
     Player,
     Rating,
     RegistrationForm,
@@ -1081,9 +1082,15 @@ async def admin_qr_items(
     from app.item_definitions import ITEM_DEFINITIONS, OBTAINABLE_ITEM_KEYS
     r = await db.execute(select(ScanCode).where(ScanCode.event_id == user.event_id).order_by(ScanCode.created_at.desc()))
     scan_codes = r.scalars().all()
+    r = await db.execute(select(PhotoItem.item_key).where(PhotoItem.event_id == user.event_id))
+    photo_keys = [row[0] for row in r.all()]
+    obtainable_keys = list(OBTAINABLE_ITEM_KEYS) + photo_keys
+    item_defs_merged = dict(ITEM_DEFINITIONS)
+    for k in photo_keys:
+        item_defs_merged[k] = {"name": f"Фото ({k})", "icon": "🖼️", "desc": "Фотография с оборотной стороной"}
     return templates.TemplateResponse(
         "admin/qr_items.html",
-        {"request": request, "user": user, "scan_codes": scan_codes, "item_defs": ITEM_DEFINITIONS, "obtainable_keys": OBTAINABLE_ITEM_KEYS},
+        {"request": request, "user": user, "scan_codes": scan_codes, "item_defs": item_defs_merged, "obtainable_keys": obtainable_keys},
     )
 
 
@@ -1096,7 +1103,10 @@ async def admin_create_qr_item(
 ):
     import secrets
     from app.item_definitions import OBTAINABLE_ITEM_KEYS
-    if item_key not in OBTAINABLE_ITEM_KEYS:
+    r = await db.execute(select(PhotoItem.item_key).where(PhotoItem.event_id == user.event_id))
+    photo_keys = [row[0] for row in r.all()]
+    valid_keys = list(OBTAINABLE_ITEM_KEYS) + photo_keys
+    if item_key not in valid_keys:
         return RedirectResponse(url="/admin/qr-items?error=invalid_item", status_code=303)
     code = f"q94_{secrets.token_hex(12)}"
     sc = ScanCode(event_id=user.event_id, code=code, item_key=item_key, name=(name or None))
@@ -1117,6 +1127,69 @@ async def admin_delete_qr_item(
         await db.delete(sc)
         await db.commit()
     return RedirectResponse(url="/admin/qr-items", status_code=303)
+
+
+@router.get("/photo-items", response_class=HTMLResponse)
+async def admin_photo_items(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    r = await db.execute(select(PhotoItem).where(PhotoItem.event_id == user.event_id).order_by(PhotoItem.item_key))
+    photo_items = r.scalars().all()
+    return templates.TemplateResponse(
+        "admin/photo_items.html",
+        {"request": request, "user": user, "photo_items": photo_items},
+    )
+
+
+@router.post("/photo-items")
+async def admin_create_photo_item(
+    item_key: str = Form(...),
+    back_signature: str = Form(""),
+    back_date: str = Form(""),
+    image: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    from fastapi.responses import RedirectResponse
+    import uuid
+    import os
+    if not image.filename or not image.content_type or not image.content_type.startswith("image/"):
+        return RedirectResponse(url="/admin/photo-items?error=need_image", status_code=303)
+    ext = (image.filename or "").split(".")[-1] or "jpg"
+    safe_ext = ext.lower() if ext.lower() in ("jpg", "jpeg", "png", "gif", "webp") else "jpg"
+    fname = f"photo/{uuid.uuid4().hex}.{safe_ext}"
+    path = f"uploads/{fname}"
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    content = await image.read()
+    with open(path, "wb") as f:
+        f.write(content)
+    pi = PhotoItem(
+        event_id=user.event_id,
+        item_key=(item_key or "").strip() or f"photo_{uuid.uuid4().hex[:8]}",
+        image_url=f"/uploads/{fname}",
+        back_signature=(back_signature or "").strip(),
+        back_date=(back_date or "").strip(),
+    )
+    db.add(pi)
+    await db.flush()
+    return RedirectResponse(url="/admin/photo-items", status_code=303)
+
+
+@router.post("/photo-items/{item_id}/delete")
+async def admin_delete_photo_item(
+    item_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    from fastapi.responses import RedirectResponse
+    r = await db.execute(select(PhotoItem).where(PhotoItem.id == item_id, PhotoItem.event_id == user.event_id))
+    pi = r.scalar_one_or_none()
+    if pi:
+        await db.delete(pi)
+        await db.flush()
+    return RedirectResponse(url="/admin/photo-items", status_code=303)
 
 
 @router.post("/content")
@@ -1160,11 +1233,15 @@ async def admin_create_dialogue(
     key: str = Form(...),
     title: str = Form(""),
     type: str = Form("LEAKED"),
+    target_roles: list[str] = Form([]),
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_admin),
 ):
     from fastapi.responses import RedirectResponse
     dt = DialogueThread(event_id=user.event_id, key=key, title=title or key, type=type)
+    valid = [r for r in target_roles if r in ("ROLE_A", "ROLE_B")]
+    if valid:
+        dt.config = dict(dt.config or {}, target_roles=valid)
     db.add(dt)
     await db.flush()
     return RedirectResponse(url=f"/admin/dialogues/{dt.id}", status_code=303)
@@ -1300,6 +1377,34 @@ async def admin_save_dialogue_characters(
     return RedirectResponse(url=f"/admin/dialogues/{thread_id}", status_code=303)
 
 
+@router.post("/dialogues/{thread_id}/target-roles")
+async def admin_save_dialogue_target_roles(
+    thread_id: int,
+    target_roles: list[str] = Form([]),
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_admin),
+):
+    from fastapi.responses import RedirectResponse
+    r = await db.execute(
+        select(DialogueThread).where(
+            DialogueThread.id == thread_id,
+            DialogueThread.event_id == user.event_id,
+        )
+    )
+    thread = r.scalar_one_or_none()
+    if not thread:
+        return RedirectResponse(url="/admin/dialogues", status_code=303)
+    valid = [r for r in target_roles if r in ("ROLE_A", "ROLE_B")]
+    cfg = dict(thread.config or {})
+    if len(valid) == 1:
+        cfg["target_roles"] = valid
+    else:
+        cfg.pop("target_roles", None)
+    thread.config = cfg
+    await db.flush()
+    return RedirectResponse(url=f"/admin/dialogues/{thread_id}", status_code=303)
+
+
 @router.post("/dialogues/{thread_id}/messages")
 async def admin_add_message(
     thread_id: int,
@@ -1327,6 +1432,8 @@ async def admin_add_message(
     thread = r.scalar_one_or_none()
     if not thread:
         return RedirectResponse(url="/admin/dialogues", status_code=303)
+    if not text and not (image and image.filename):
+        return RedirectResponse(url=f"/admin/dialogues/{thread_id}?error=need_text_or_image", status_code=303)
     r = await db.execute(
         select(DialogueMessage.order_index)
         .where(DialogueMessage.thread_id == thread_id)
@@ -1338,7 +1445,19 @@ async def admin_add_message(
     char = (character or "").strip()
     if char and not char.startswith("@"):
         char = "@" + char
-    payload = {"text": text, "character": char}
+    payload = {"text": text or "", "character": char}
+    if image and image.filename and image.content_type and image.content_type.startswith("image/"):
+        import uuid
+        import os
+        ext = (image.filename or "").split(".")[-1] or "jpg"
+        safe_ext = ext.lower() if ext.lower() in ("jpg", "jpeg", "png", "gif", "webp") else "jpg"
+        fname = f"dialogue/{uuid.uuid4().hex}.{safe_ext}"
+        path = f"uploads/{fname}"
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        content = await image.read()
+        with open(path, "wb") as f:
+            f.write(content)
+        payload["image"] = f"/uploads/{fname}"
     if delete_after_seconds and delete_after_seconds > 0:
         payload["delete_after_seconds"] = delete_after_seconds
     if reply_options.strip():

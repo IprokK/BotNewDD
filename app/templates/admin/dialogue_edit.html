@@ -17,7 +17,16 @@
 
 <p><a href="/admin/dialogues" style="color:var(--admin-accent);">← К списку диалогов</a> · <a href="/admin/dialogues/{{ thread.id }}/graph" style="color:var(--admin-accent);">📊 Редактор графа</a></p>
 <h2>{{ thread.title or thread.key }}</h2>
-<p style="color:var(--admin-muted);">Тип: {{ thread.type }} | Ключ: {{ thread.key }}</p>
+<p style="color:var(--admin-muted);">Тип: {{ thread.type }} | Ключ: {{ thread.key }}{% if (thread.config or {}).get('target_roles') %} | Роли: {{ (thread.config or {}).get('target_roles', [])|join(', ') }}{% endif %}</p>
+<div class="card" style="margin-bottom:20px;">
+    <h3>Роли (кому показывать диалог)</h3>
+    <form method="post" action="/admin/dialogues/{{ thread.id }}/target-roles" style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;">
+        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="target_roles" value="ROLE_A" {% if 'ROLE_A' in ((thread.config or {}).get('target_roles') or []) %}checked{% endif %}> Роль A</label>
+        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="target_roles" value="ROLE_B" {% if 'ROLE_B' in ((thread.config or {}).get('target_roles') or []) %}checked{% endif %}> Роль B</label>
+        <button type="submit">Сохранить</button>
+        <small style="color:var(--admin-muted);">Обе отмечены или ни одна = показывать обеим ролям</small>
+    </form>
+</div>
 <div class="card" style="margin-bottom:20px;">
     <h3>Персонажи (аватарки)</h3>
     <p style="font-size:0.9rem;color:var(--admin-muted);">Формат: @ник — URL аватарки. Пример: @anna — https://....</p>

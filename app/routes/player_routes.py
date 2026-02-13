@@ -14,6 +14,7 @@ from app.models import (
     ContentBlock,
     Delivery,
     DialogueMessage,
+    PhotoItem,
     DialogueReply,
     DialogueStartConfig,
     DialogueThread,
@@ -63,8 +64,13 @@ def _normalize_role(role: str | None) -> str:
 
 
 def _thread_has_content_for_role(thread, role: str) -> bool:
-    """Есть ли в диалоге хотя бы одно сообщение для этой роли (TEAM или совпадение по роли)."""
+    """Есть ли в диалоге хотя бы одно сообщение для этой роли (TEAM или совпадение по роли).
+    Также проверяет target_roles в config — если заданы, диалог показывается только этим ролям."""
     from app.models import ContentAudience
+    target_roles = (thread.config or {}).get("target_roles")
+    if target_roles:
+        if role not in target_roles:
+            return False
     allowed = {ContentAudience.TEAM.value, role}
     return any((m.audience or ContentAudience.TEAM.value) in allowed for m in (thread.messages or []))
 
@@ -156,6 +162,19 @@ async def player_dashboard(
     from app.diary_content import get_diary_entries_for_role
     diary_subtitle, diary_entries = get_diary_entries_for_role(player_role)
 
+    # Фото-предметы в инвентаре
+    photo_items_map = {}
+    photo_keys = [k for k in inventory if isinstance(k, str) and (k.startswith("photo_") or k in ("photo",))]
+    if photo_keys:
+        r = await db.execute(
+            select(PhotoItem).where(
+                PhotoItem.event_id == user.event_id,
+                PhotoItem.item_key.in_(photo_keys),
+            )
+        )
+        for pi in r.scalars().all():
+            photo_items_map[pi.item_key] = {"image_url": pi.image_url, "signature": pi.back_signature or "", "date": pi.back_date or ""}
+
     # Все станции и посещённые — для маршрутного листа
     r = await db.execute(
         select(Station).where(Station.event_id == user.event_id).order_by(Station.name)
@@ -223,6 +242,7 @@ async def player_dashboard(
             "current_station_id": current_station_id,
             "diary_subtitle": diary_subtitle,
             "diary_entries": diary_entries,
+            "photo_items_map": photo_items_map,
         },
     )
 
@@ -672,7 +692,10 @@ async def dialogue_reply(
                 opts_html += "</div>"
         del_after = p.get("delete_after_seconds") or 0
         da = f' data-delete-after="{del_after}"' if del_after else ""
-        return f'<div class="msg-row in"{da}><div class="msg-avatar">{av_inner}</div><div class="msg-bubble"><div class="sender">{html.escape(sender)}</div>{html.escape(text)}{opts_html}</div></div>'
+        img_html = ""
+        if p.get("image"):
+            img_html = f'<img src="{html.escape(p["image"])}" alt="" style="max-width:100%;border-radius:8px;margin-bottom:8px;display:block;">'
+        return f'<div class="msg-row in"{da}><div class="msg-avatar">{av_inner}</div><div class="msg-bubble"><div class="sender">{html.escape(sender)}</div>{img_html}{html.escape(text)}{opts_html}</div></div>'
 
     if next_msg:
         msgs_by_id_local = {mm.id: mm for mm in thread.messages}
