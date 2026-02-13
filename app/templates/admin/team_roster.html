@@ -2,44 +2,63 @@
 {% block title %}Состав команд{% endblock %}
 {% block content %}
 <style>
-    .roster-board {
+    .roster-unassigned-row {
+        background: var(--admin-surface);
+        border: 2px dashed var(--admin-border);
+        border-radius: 10px;
+        padding: 12px 16px;
+        margin-bottom: 20px;
+    }
+    .roster-unassigned-row.drag-over { border-color: var(--admin-accent); background: rgba(88,166,255,0.15); }
+    .roster-unassigned-row h3 {
+        margin: 0 0 10px;
+        font-size: 0.9rem;
+        color: var(--admin-muted);
+    }
+    .roster-unassigned-row .player-list {
         display: flex;
         flex-wrap: wrap;
-        gap: 12px;
-        padding-bottom: 16px;
-        min-height: 200px;
-        overflow: visible;
+        gap: 8px;
+        min-height: 44px;
+    }
+    .roster-teams-table {
+        display: table;
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 12px;
+    }
+    .roster-teams-row {
+        display: table-row;
     }
     .roster-column {
+        display: table-cell;
+        vertical-align: top;
         background: var(--admin-surface);
         border: 2px dashed var(--admin-border);
         border-radius: 10px;
         padding: 12px;
-        min-height: 100px;
+        min-width: 130px;
+        max-width: 130px;
     }
-    .roster-column.roster-unassigned { flex: 1 1 180px; min-width: 180px; }
     .roster-column.roster-team {
-        flex: 0 0 130px;
         max-height: 140px;
-        display: flex;
-        flex-direction: column;
         overflow: hidden;
     }
     .roster-column.roster-team .player-list {
-        flex: 1;
         overflow-y: auto;
+        max-height: 100px;
         min-height: 44px;
     }
     .roster-column.drag-over { border-color: var(--admin-accent); background: rgba(88,166,255,0.15); }
     .roster-column h3 {
         margin: 0 0 10px;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         color: var(--admin-muted);
         padding-bottom: 6px;
         border-bottom: 1px solid var(--admin-border);
     }
-    .roster-column.roster-team h3 { font-size: 0.85rem; }
     .player-list { min-height: 36px; }
+    .roster-teams-table .player-list { display: block; }
     .player-card {
         background: var(--admin-bg);
         padding: 8px 10px;
@@ -53,6 +72,7 @@
         justify-content: space-between;
         gap: 6px;
     }
+    .roster-unassigned-row .player-card { margin-bottom: 0; }
     .player-card:last-child { margin-bottom: 0; }
     .player-card:hover { border-color: var(--admin-border); }
     .player-card.sortable-ghost { opacity: 0.5; }
@@ -65,43 +85,46 @@
 <h2>Состав команд</h2>
 <p style="color:var(--admin-muted);">Перетаскивайте игроков между колонками. Перетащите в «Без команды» — убрать из команды.</p>
 
-<div class="roster-board" id="roster-board">
-    <div class="roster-column roster-unassigned" data-team-id="" id="col-unassigned">
-        <h3>🚫 Без команды</h3>
-        <div class="player-list" data-team-id="">
-            {% for item in by_team.get(None, []) %}
-            <div class="player-card" data-player-id="{{ item.player.id }}" draggable="true">
-                <span class="name">{{ item.name }}</span>
-                <span class="role">—</span>
-            </div>
-            {% else %}
-            <div class="empty-placeholder" style="color:var(--admin-muted);font-size:0.8rem;">Пусто</div>
-            {% endfor %}
+<div class="roster-unassigned-row roster-column" data-team-id="" id="col-unassigned">
+    <h3>🚫 Без команды</h3>
+    <div class="player-list" data-team-id="">
+        {% for item in by_team.get(None, []) %}
+        <div class="player-card" data-player-id="{{ item.player.id }}" draggable="true">
+            <span class="name">{{ item.name }}</span>
+            <span class="role">—</span>
         </div>
+        {% else %}
+        <div class="empty-placeholder" style="color:var(--admin-muted);font-size:0.8rem;">Пусто</div>
+        {% endfor %}
     </div>
-    {% for team in teams %}
-    <div class="roster-column roster-team" data-team-id="{{ team.id }}" id="col-{{ team.id }}">
-        <h3>{{ team.name }}</h3>
-        <div class="player-list" data-team-id="{{ team.id }}">
-            {% for item in by_team.get(team.id, []) %}
-            <div class="player-card" data-player-id="{{ item.player.id }}" draggable="true">
-                <span class="name">{{ item.name }}</span>
-                <span class="role">{{ item.player.role or 'A' }}</span>
-            </div>
-            {% else %}
-            <div class="empty-placeholder" style="color:var(--admin-muted);font-size:0.8rem;">Пусто</div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endfor %}
 </div>
+
+<table class="roster-teams-table">
+    <tr class="roster-teams-row">
+        {% for team in teams %}
+        <td class="roster-column roster-team" data-team-id="{{ team.id }}" id="col-{{ team.id }}">
+            <h3>{{ team.name }}</h3>
+            <div class="player-list" data-team-id="{{ team.id }}">
+                {% for item in by_team.get(team.id, []) %}
+                <div class="player-card" data-player-id="{{ item.player.id }}" draggable="true">
+                    <span class="name">{{ item.name }}</span>
+                    <span class="role">{{ item.player.role or 'A' }}</span>
+                </div>
+                {% else %}
+                <div class="empty-placeholder" style="color:var(--admin-muted);font-size:0.8rem;">Пусто</div>
+                {% endfor %}
+            </div>
+        </td>
+        {% endfor %}
+    </tr>
+</table>
 
 <script>
 (function() {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
     function getTeamIdFromList(listEl) {
-        const col = listEl.closest('.roster-column');
+        const col = listEl.closest('[data-team-id]');
         const tid = col?.dataset.teamId;
         return tid === '' || tid === undefined ? null : (tid ? parseInt(tid) : null);
     }
