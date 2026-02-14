@@ -416,9 +416,63 @@ async def admin_station_detail(
         select(StationHost).where(StationHost.station_id == station_id)
     )
     hosts = r.scalars().all()
+    # Визиты: очки по командам и состав (из логов visit_finished или текущий состав)
+    r = await db.execute(
+        select(StationVisit, Team)
+        .join(Team, StationVisit.team_id == Team.id)
+        .where(
+            StationVisit.station_id == station_id,
+            StationVisit.event_id == user.event_id,
+            StationVisit.state == "finished",
+        )
+        .order_by(StationVisit.ended_at.desc().nullslast(), StationVisit.created_at.desc())
+    )
+    # Состав из логов visit_finished (visit_id -> [names])
+    rlog = await db.execute(
+        select(EventLog).where(
+            EventLog.event_id == user.event_id,
+            EventLog.event_type == "visit_finished",
+        )
+    )
+    players_from_log: dict[int, list[str]] = {}
+    for log in rlog.scalars().all():
+        vid = (log.data or {}).get("visit_id")
+        plist = (log.data or {}).get("players")
+        if vid is not None and isinstance(plist, list):
+            players_from_log[vid] = [str(p) for p in plist]
+
+    visits_data = []
+    for visit, team in r.all():
+        players = players_from_log.get(visit.id)
+        if players is None:
+            rp = await db.execute(
+                select(Player, RegistrationForm)
+                .outerjoin(
+                    RegistrationForm,
+                    (RegistrationForm.event_id == Player.event_id) & (RegistrationForm.tg_id == Player.tg_id),
+                )
+                .where(Player.team_id == team.id, Player.event_id == user.event_id)
+            )
+            players = []
+            for player, form in rp.all():
+                name = (form.full_name if form else None) or f"tg:{player.tg_id}"
+                players.append(name)
+        visits_data.append({
+            "visit": visit,
+            "team": team,
+            "points": visit.points_awarded,
+            "players": players,
+            "ended_at": visit.ended_at,
+        })
     return templates.TemplateResponse(
         "admin/station_detail.html",
-        {"request": request, "user": user, "station": station, "hosts": hosts},
+        {
+            "request": request,
+            "user": user,
+            "station": station,
+            "hosts": hosts,
+            "visits_data": visits_data,
+        },
     )
 
 

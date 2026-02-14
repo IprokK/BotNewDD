@@ -48,6 +48,35 @@
 </div>
 
 <div class="card">
+    <h3>Визиты и очки</h3>
+    <p style="color:var(--admin-muted);font-size:0.9rem;">Команды, завершившие визит на эту станцию, начисленные очки и состав на момент завершения (из логов).</p>
+    {% if visits_data %}
+    <table style="width:100%;border-collapse:collapse;margin-top:12px;">
+        <thead>
+            <tr style="border-bottom:1px solid var(--admin-border);text-align:left;">
+                <th style="padding:8px 12px;">Команда</th>
+                <th style="padding:8px 12px;">Очки</th>
+                <th style="padding:8px 12px;">Состав</th>
+                <th style="padding:8px 12px;">Завершён</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for v in visits_data %}
+            <tr style="border-bottom:1px solid var(--admin-border);">
+                <td style="padding:8px 12px;"><strong>{{ v.team.name }}</strong></td>
+                <td style="padding:8px 12px;">{{ v.points }}</td>
+                <td style="padding:8px 12px;font-size:0.9rem;">{{ v.players | join(', ') or '—' }}</td>
+                <td style="padding:8px 12px;color:var(--admin-muted);font-size:0.85rem;">{% if v.ended_at %}{{ v.ended_at.strftime('%d.%m %H:%M') }}{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--admin-muted);margin-top:12px;">Пока нет завершённых визитов</p>
+    {% endif %}
+</div>
+
+<div class="card">
     <h3>Ведущие ({{ hosts|length }})</h3>
     <p style="color:var(--admin-muted);">Добавить ведущих можно в разделе <a href="/admin/station-hosts">Ведущие станций</a>.</p>
     {% for h in hosts %}

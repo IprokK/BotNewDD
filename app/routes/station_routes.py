@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 from app.auth import UserContext, get_user_from_session, require_host
 from app.database import get_db
-from app.models import EventLog, Station, StationHost, StationVisit, Team, VisitState
+from app.models import EventLog, Player, RegistrationForm, Station, StationHost, StationVisit, Team, VisitState
 from app.services import log_event, parse_qr_token, ws_manager
 from app.notify import notify_visit_finished
 
@@ -223,6 +223,20 @@ async def visit_finish(
     team.current_station_id = None
     team.score_total += req.points_awarded
 
+    # Состав команды на момент завершения визита (для отображения в админке)
+    rp = await db.execute(
+        select(Player, RegistrationForm)
+        .outerjoin(
+            RegistrationForm,
+            (RegistrationForm.event_id == Player.event_id) & (RegistrationForm.tg_id == Player.tg_id),
+        )
+        .where(Player.team_id == req.team_id, Player.event_id == user.event_id)
+    )
+    players_snapshot = []
+    for p, form in rp.all():
+        name = (form.full_name if form else None) or f"tg:{p.tg_id}"
+        players_snapshot.append(name)
+
     await log_event(
         db,
         user.event_id,
@@ -231,6 +245,7 @@ async def visit_finish(
             "visit_id": visit.id,
             "team_id": req.team_id,
             "points": req.points_awarded,
+            "players": players_snapshot,
         },
         team_id=req.team_id,
     )
